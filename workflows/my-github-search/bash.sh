@@ -97,6 +97,12 @@ while IFS= read -r REPO_INFO; do
         \"subtitle\": \"View Repository Tags\",
         \"arg\": \"https://github.com/$REPO_NAME/tags\",
         \"mods\": {\"cmd\": {\"subtitle\": \"⌘: Copy Tags URL to clipboard\", \"arg\": \"https://github.com/$REPO_NAME/tags\"}}
+      },
+      {
+        \"title\": \"$REPO_NAME Create PR\",
+        \"subtitle\": \"Create a New Pull Request\",
+        \"arg\": \"https://github.com/$REPO_NAME/compare/main...$GITHUB_USERNAME:$REPO_NAME:xxx?expand=1\",
+        \"mods\": {\"cmd\": {\"subtitle\": \"⌘: Copy Create PR URL to clipboard\", \"arg\": \"https://github.com/$REPO_NAME/compare/main...$GITHUB_USERNAME:$REPO_NAME:xxx?expand=1\"}}
       }"
     fi
   fi
