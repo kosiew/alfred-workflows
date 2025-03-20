@@ -1,22 +1,25 @@
-
 import sys
 import re
 import json
 import os
+import subprocess  # newly added
+from pathlib import Path  # newly added
+import time  # newly added
 
 # Constants for Alfred workflow
-ITEMS = 'items'
-TITLE = 'title'
-SUBTITLE = 'subtitle'
-ARG = 'arg'
-VARIABLES = 'variables'
-MESSAGE = 'message'
-MESSAGE_TITLE = 'message_title'
-ALFREDWORKFLOW = 'alfredworkflow'
-ENTRY = 'entry'
-MEANING = 'meaning'
-WORD = 'word'
-WHATSAPP_NUMBER = 'whatsapp_number'
+ITEMS = "items"
+TITLE = "title"
+SUBTITLE = "subtitle"
+ARG = "arg"
+VARIABLES = "variables"
+MESSAGE = "message"
+MESSAGE_TITLE = "message_title"
+ALFREDWORKFLOW = "alfredworkflow"
+ENTRY = "entry"
+MEANING = "meaning"
+WORD = "word"
+WHATSAPP_NUMBER = "whatsapp_number"
+
 
 def output_json(a_dict):
     """Outputs a dictionary as JSON to stdout."""
@@ -44,6 +47,7 @@ def process_text(text):
         censored_word = first_word  # Short words remain unchanged
 
     count = 0  # Track occurrences
+
     def replacer(match):
         """Replace occurrences after the first"""
         nonlocal count
@@ -51,18 +55,62 @@ def process_text(text):
         return censored_word if count == 1 else "~"
 
     # Replace only full-word occurrences
-    transformed_text = re.sub(rf'{re.escape(first_word_pattern)}', replacer, text)
+    transformed_text = re.sub(rf"{re.escape(first_word_pattern)}", replacer, text)
 
     return first_2_lines, transformed_text
+
+
+def rename_dalle_files():
+    try:
+        downloads_dir = Path.home() / "Downloads"
+        one_min_ago = time.time() - 60
+        recent_files = [
+            f for f in downloads_dir.glob("DALL-E*") if f.stat().st_mtime > one_min_ago
+        ]
+        if not recent_files:
+            raise Exception("No recent DALL-E files found.")
+        recent_file = max(recent_files, key=lambda f: f.stat().st_mtime)
+        # Run llm to get a short name
+        result = subprocess.run(
+            ["llm", "-m", "l32", "shorten to one meaningful unique word"],
+            input=recent_file.name,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        short_name = result.stdout.strip()
+        if not short_name:
+            raise Exception("llm returned an empty name.")
+        new_path = recent_file.parent / short_name
+        recent_file.rename(new_path)
+        output = {
+            ALFREDWORKFLOW: {
+                ARG: short_name,
+                VARIABLES: {
+                    MESSAGE: f"Renamed to: {new_path}",
+                    MESSAGE_TITLE: "Rename Success",
+                },
+            }
+        }
+    except Exception as e:
+        output = {
+            ALFREDWORKFLOW: {
+                ARG: str(e),
+                VARIABLES: {MESSAGE: f"Error: {e}", MESSAGE_TITLE: "Rename Failed"},
+            }
+        }
+
+    return output
+
 
 def do():
     """Main function to handle Alfred workflow input and output."""
     action = sys.argv[1]
-    result = 'OK'
-    message = ''
-    message_title = ''
-
-    if action == 'new_dictionary_entry':
+    result = "OK"
+    message = ""
+    message_title = ""
+    output = {}
+    if action == "new_dictionary_entry":
         # Get input text from Alfred environment variable
         input_text = os.getenv("entry", "").strip()
 
@@ -77,8 +125,8 @@ def do():
                     MESSAGE: "Transformed text copied!",
                     MESSAGE_TITLE: "Success",
                     WORD: word,
-                    MEANING: meaning
-                }
+                    MEANING: meaning,
+                },
             }
         }
 
@@ -88,9 +136,9 @@ def do():
 
         # Extract phone number
         # keep + at the beginning and digits only
-        phone_number = re.sub(r'\D', '', input_text) 
-        if not phone_number.startswith('+'):
-            phone_number = '+6' + phone_number
+        phone_number = re.sub(r"\D", "", input_text)
+        if not phone_number.startswith("+"):
+            phone_number = "+6" + phone_number
 
         # Prepare JSON output for Alfred
         output = {
@@ -99,13 +147,16 @@ def do():
                 VARIABLES: {
                     MESSAGE: "Phone number copied!",
                     MESSAGE_TITLE: phone_number,
-                    WHATSAPP_NUMBER: phone_number
-                }
+                    WHATSAPP_NUMBER: phone_number,
+                },
             }
         }
 
+    elif action == "rename_dalle_file":  # newly added action branch
+        output = rename_dalle_files()
+
     output_json(output)
+
 
 if __name__ == "__main__":
     do()
-
