@@ -132,9 +132,6 @@ def shorten(phrase, number_of_words=2):
 def do():
     """Main function to handle Alfred workflow input and output."""
     action = sys.argv[1]
-    result = "OK"
-    message = ""
-    message_title = ""
     output = {}
     if action == "new_dictionary_entry":
         # Get input text from Alfred environment variable
