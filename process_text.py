@@ -62,31 +62,60 @@ def process_text(text):
 
 def rename_dalle_files():
     try:
+        print("==> Starting rename_dalle_files")
         downloads_dir = Path.home() / "Downloads"
-        one_min_ago = time.time() - 60 * 30
+        print(f"==> Downloads directory: {downloads_dir}")
+        
+        one_min_ago = time.time() - 60 * 60
+        print(f"==> Looking for files modified after: {one_min_ago}")
+        
+        # Print all recent files to debug
+        print("==> All recent files in Downloads:")
+        all_recent = [f for f in downloads_dir.iterdir() if f.stat().st_mtime > one_min_ago]
+        for f in all_recent[:5]:  # Limit to first 5 to avoid console spam
+            print(f"    {f.name}")
+            
         recent_files = [
-            f for f in downloads_dir.glob("DALL-E*") if f.stat().st_mtime > one_min_ago
+            f for f in downloads_dir.glob("DALL*") if f.stat().st_mtime > one_min_ago
         ]
+        print(f"==> Recent files found: {len(recent_files)}")
+        
         if not recent_files:
             raise Exception("No recent DALL-E files found.")
+        
         recent_file = max(recent_files, key=lambda f: f.stat().st_mtime)
+        print(f"==> Most recent file: {recent_file}")
+        
         # Run llm to get a short name
+        print("==> Running llm to generate short name")
         result = shorten(recent_file, 2)
-        short_name = result.stdout.strip()
-        if not short_name:
+        short_name_base = result
+        print(f"==> Generated short name base: {short_name_base}")
+        
+        if not short_name_base:
             raise Exception("llm returned an empty name.")
+        
+        # Retain the file extension
+        file_extension = recent_file.suffix
+        short_name = f"{short_name_base}{file_extension}"
+        print(f"==> Final name with extension: {short_name}")
+        
         new_path = recent_file.parent / short_name
+        print(f"==> Renaming to: {new_path}")
         recent_file.rename(new_path)
+        
         output = {
             ALFREDWORKFLOW: {
                 ARG: short_name,
                 VARIABLES: {
-                    MESSAGE: f"Renamed to: {new_path}",
+                    MESSAGE: f"Renamed: {recent_file.name} → {short_name}",
                     MESSAGE_TITLE: "Rename Success",
                 },
             }
         }
+        print("==> Rename completed successfully")
     except Exception as e:
+        print(f"==> Error occurred: {e}")
         output = {
             ALFREDWORKFLOW: {
                 ARG: str(e),
@@ -104,8 +133,15 @@ def shorten(phrase, number_of_words=2):
             capture_output=True,
             check=True,
         )
+        
+    # Extract only the actual words, removing any introduction text and quotes
+    output = result.stdout.strip()
     
-    return result
+    # Find the last N words, stripping quotes
+    words = output.split()
+    clean_output = " ".join(words[-number_of_words:]).replace('"', '').replace("'", "")
+    
+    return clean_output
 
 
 def do():
