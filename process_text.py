@@ -63,7 +63,7 @@ def process_text(text):
 def rename_dalle_files():
     try:
         downloads_dir = Path.home() / "Downloads"
-        one_min_ago = time.time() - 60
+        one_min_ago = time.time() - 60 * 30
         recent_files = [
             f for f in downloads_dir.glob("DALL-E*") if f.stat().st_mtime > one_min_ago
         ]
@@ -71,13 +71,7 @@ def rename_dalle_files():
             raise Exception("No recent DALL-E files found.")
         recent_file = max(recent_files, key=lambda f: f.stat().st_mtime)
         # Run llm to get a short name
-        result = subprocess.run(
-            ["llm", "-m", "l32", "shorten to one meaningful unique word"],
-            input=recent_file.name,
-            text=True,
-            capture_output=True,
-            check=True,
-        )
+        result = shorten(recent_file, 2)
         short_name = result.stdout.strip()
         if not short_name:
             raise Exception("llm returned an empty name.")
@@ -101,6 +95,17 @@ def rename_dalle_files():
         }
 
     return output
+
+def shorten(phrase, number_of_words=2):
+    result = subprocess.run(
+            ["llm", "-m", "l32", f"shorten to {number_of_words} meaningful unique word"],
+            input=phrase.name,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+    
+    return result
 
 
 def do():
