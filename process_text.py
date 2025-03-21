@@ -277,15 +277,13 @@ def remove_rust_printlns(text):
         # Check if this line starts a debug println
         if 'println!' in line and ('==> ' in line or (line.strip().endswith('println!(') and i + 1 < len(lines) and '==> ' in lines[i+1])):
             # Found a debug println, now find where it ends
-            open_parens = line.count('(') - line.count(')')
             j = i
             
-            # Continue until we find the closing parenthesis and semicolon
-            while open_parens > 0 or ';' not in lines[j]:
+            # Continue until we find the closing pattern ");", accounting for possible strings containing ");"
+            while ');' not in lines[j]:
                 j += 1
                 if j >= len(lines):
                     break  # Malformed code - reached end without closing
-                open_parens += lines[j].count('(') - lines[j].count(')')
             
             # Skip all lines that were part of this println
             i = j + 1
