@@ -261,6 +261,43 @@ def streamline_python_imports(text):
     return '\n'.join(result)
 
 
+def remove_rust_printlns(text):
+    """Removes println!("==> ...") statements from Rust code, including multi-line ones."""
+    if not text or text.isspace():
+        return text
+    
+    # Split into lines and add a line index
+    lines = text.strip().split('\n')
+    filtered_lines = []
+    
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        
+        # Check if this line starts a debug println
+        if 'println!' in line and ('==> ' in line or (line.strip().endswith('println!(') and i + 1 < len(lines) and '==> ' in lines[i+1])):
+            # Found a debug println, now find where it ends
+            open_parens = line.count('(') - line.count(')')
+            j = i
+            
+            # Continue until we find the closing parenthesis and semicolon
+            while open_parens > 0 or ';' not in lines[j]:
+                j += 1
+                if j >= len(lines):
+                    break  # Malformed code - reached end without closing
+                open_parens += lines[j].count('(') - lines[j].count(')')
+            
+            # Skip all lines that were part of this println
+            i = j + 1
+            continue
+        else:
+            # Keep this line
+            filtered_lines.append(line)
+            i += 1
+    
+    return '\n'.join(filtered_lines)
+
+
 def do():
     """Main function to handle Alfred workflow input and output."""
     action = sys.argv[1]
@@ -338,6 +375,24 @@ def do():
                 ARG: streamlined_text,
                 VARIABLES: {
                     MESSAGE: "Streamlined imports copied!",
+                    MESSAGE_TITLE: "Success",
+                },
+            }
+        }
+
+    elif action == "remove_println_in_rust":
+        # Get input text from Alfred environment variable
+        input_text = os.getenv("entry", "").strip()
+        
+        # Remove debug println statements
+        filtered_text = remove_rust_printlns(input_text)
+        
+        # Prepare JSON output for Alfred
+        output = {
+            ALFREDWORKFLOW: {
+                ARG: filtered_text,
+                VARIABLES: {
+                    MESSAGE: "Debug printlns removed!",
                     MESSAGE_TITLE: "Success",
                 },
             }
