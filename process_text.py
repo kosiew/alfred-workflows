@@ -296,6 +296,41 @@ def remove_rust_printlns(text):
     return '\n'.join(filtered_lines)
 
 
+def remove_python_prints(text):
+    """Removes print("==> ...") or print('==> ...') statements from Python code, including multi-line ones."""
+    if not text or text.isspace():
+        return text
+    
+    lines = text.strip().split('\n')
+    filtered_lines = []
+    
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        
+        # Check if this line starts a debug print statement (with single or double quotes)
+        if 'print(' in line and ('"==> ' in line or "'==> " in line or 
+                                (line.strip().endswith('print(') and i + 1 < len(lines) and 
+                                 ('"==> ' in lines[i+1] or "'==> " in lines[i+1]))):
+            # Found a debug print, now find where it ends
+            j = i
+            
+            # Continue until we find the closing parenthesis
+            while ')' not in lines[j]:
+                j += 1
+                if j >= len(lines):
+                    break  # Malformed code - reached end without closing
+            
+            # Skip all lines that were part of this print
+            i = j + 1
+            continue
+        else:
+            # Keep this line
+            filtered_lines.append(line)
+            i += 1
+    
+    return '\n'.join(filtered_lines)
+
 def do():
     """Main function to handle Alfred workflow input and output."""
     action = sys.argv[1]
@@ -391,6 +426,24 @@ def do():
                 ARG: filtered_text,
                 VARIABLES: {
                     MESSAGE: "Debug printlns removed!",
+                    MESSAGE_TITLE: "Success",
+                },
+            }
+        }
+
+    elif action == "remove_print_in_python":
+        # Get input text from Alfred environment variable
+        input_text = os.getenv("entry", "").strip()
+        
+        # Remove debug print statements
+        filtered_text = remove_python_prints(input_text)
+        
+        # Prepare JSON output for Alfred
+        output = {
+            ALFREDWORKFLOW: {
+                ARG: filtered_text,
+                VARIABLES: {
+                    MESSAGE: "Debug prints removed!",
                     MESSAGE_TITLE: "Success",
                 },
             }
