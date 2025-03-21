@@ -129,6 +129,138 @@ def shorten(phrase, number_of_words=2):
     return clean_output
 
 
+def streamline_rust_imports(text):
+    """Streamlines Rust import statements by consolidating imports with the same base path."""
+    if not text or text.isspace():
+        return text
+    
+    lines = text.strip().split('\n')
+    use_statements = []
+    other_lines = []
+    
+    # Separate "use" statements from other lines
+    for line in lines:
+        line = line.strip()
+        if line.startswith('use ') and line.endswith(';'):
+            use_statements.append(line)
+        else:
+            other_lines.append(line)
+    
+    # Parse and group imports by base path
+    grouped_imports = {}
+    special_imports = []
+    
+    for statement in use_statements:
+        # Remove 'use ' prefix and ';' suffix
+        import_path = statement[4:-1].strip()
+        
+        # Handle special cases like "use super::*"
+        if not '::' in import_path or import_path.endswith('::*'):
+            special_imports.append(statement)
+            continue
+        
+        # Find the right-most "::" that isn't inside braces
+        parts = import_path.split('::')
+        
+        # Simple heuristic: check if the last part starts with a brace
+        if parts[-1].startswith('{'):
+            # It's already a grouped import
+            base_path = '::'.join(parts[:-1])
+            items_str = parts[-1][1:-1]  # Remove { }
+            items = [item.strip() for item in items_str.split(',')]
+        else:
+            # It's a simple import
+            last_part = parts[-1]
+            base_path = '::'.join(parts[:-1])
+            items = [last_part]
+        
+        if base_path not in grouped_imports:
+            grouped_imports[base_path] = []
+        
+        # Add items without duplicates
+        for item in items:
+            if item and item not in grouped_imports[base_path]:
+                grouped_imports[base_path].append(item)
+    
+    # Generate streamlined imports
+    streamlined_imports = []
+    
+    # Add special imports first
+    streamlined_imports.extend(special_imports)
+    
+    # Add consolidated imports
+    for base_path, items in sorted(grouped_imports.items()):
+        sorted_items = sorted(items)
+        if len(sorted_items) == 1:
+            streamlined_imports.append(f'use {base_path}::{sorted_items[0]};')
+        else:
+            items_str = ', '.join(sorted_items)
+            streamlined_imports.append(f'use {base_path}::{{{items_str}}};')
+    
+    # Combine result
+    result = other_lines + streamlined_imports
+    return '\n'.join(result)
+
+
+def streamline_python_imports(text):
+    """Streamlines Python import statements by consolidating imports from the same module."""
+    if not text or text.isspace():
+        return text
+    
+    lines = text.strip().split('\n')
+    
+    # Group imports by module
+    simple_imports = set()  # For "import x"
+    from_imports = {}  # For "from x import y"
+    
+    for line in lines:
+        line = line.strip()
+        
+        # Handle "import x" statements
+        if line.startswith('import ') and not 'from ' in line:
+            modules = [m.strip() for m in line[7:].split(',')]
+            for module in modules:
+                simple_imports.add(module)
+                
+        # Handle "from x import y" statements
+        elif line.startswith('from '):
+            parts = line.split(' import ')
+            if len(parts) == 2:
+                module = parts[0][5:].strip()
+                items = [item.strip() for item in parts[1].split(',')]
+                
+                if module not in from_imports:
+                    from_imports[module] = []
+                
+                for item in items:
+                    if item and item not in from_imports[module]:
+                        from_imports[module].append(item)
+    
+    # Generate streamlined imports
+    result = []
+    
+    # Simple imports
+    if simple_imports:
+        sorted_imports = sorted(simple_imports)
+        for module in sorted_imports:
+            result.append(f"import {module}")
+    
+    # From imports
+    for module, items in sorted(from_imports.items()):
+        sorted_items = sorted(items)
+        # If many items, use multi-line format
+        if len(', '.join(sorted_items)) > 79:
+            result.append(f"from {module} import (")
+            for item in sorted_items:
+                result.append(f"    {item},")
+            result.append(")")
+        else:
+            items_str = ', '.join(sorted_items)
+            result.append(f"from {module} import {items_str}")
+    
+    return '\n'.join(result)
+
+
 def do():
     """Main function to handle Alfred workflow input and output."""
     action = sys.argv[1]
@@ -171,6 +303,42 @@ def do():
                     MESSAGE: "Phone number copied!",
                     MESSAGE_TITLE: phone_number,
                     WHATSAPP_NUMBER: phone_number,
+                },
+            }
+        }
+    
+    elif action == "streamline_use_in_rust":
+        # Get input text from Alfred environment variable
+        input_text = os.getenv("entry", "").strip()
+        
+        # Streamline the Rust import statements
+        streamlined_text = streamline_rust_imports(input_text)
+        
+        # Prepare JSON output for Alfred
+        output = {
+            ALFREDWORKFLOW: {
+                ARG: streamlined_text,
+                VARIABLES: {
+                    MESSAGE: "Streamlined imports copied!",
+                    MESSAGE_TITLE: "Success",
+                },
+            }
+        }
+
+    elif action == "streamline_import_in_python":
+        # Get input text from Alfred environment variable
+        input_text = os.getenv("entry", "").strip()
+        
+        # Streamline the Python import statements
+        streamlined_text = streamline_python_imports(input_text)
+        
+        # Prepare JSON output for Alfred
+        output = {
+            ALFREDWORKFLOW: {
+                ARG: streamlined_text,
+                VARIABLES: {
+                    MESSAGE: "Streamlined imports copied!",
+                    MESSAGE_TITLE: "Success",
                 },
             }
         }
