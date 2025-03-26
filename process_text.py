@@ -137,28 +137,43 @@ def streamline_rust_imports(text):
         return text
     
     lines = text.strip().split('\n')
-    use_statements = []
-    other_lines = []
     
-    # Separate "use" statements from other lines
-    for line in lines:
-        line = line.strip()
-        if line.startswith('use ') and line.endswith(';'):
-            use_statements.append(line)
+    # Process lines to capture cfg attributes with their use statements
+    use_statements = []  # Will contain (cfg_attr, use_statement) tuples
+    other_lines = []
+    i = 0
+    
+    while i < len(lines):
+        line = lines[i].strip()
+        
+        # Check if this is a cfg attribute that might be attached to a use statement
+        if line.startswith('#[cfg') and i + 1 < len(lines) and lines[i + 1].strip().startswith('use '):
+            cfg_attr = line
+            use_stmt = lines[i + 1].strip()
+            if use_stmt.endswith(';'):
+                use_statements.append((cfg_attr, use_stmt))
+                i += 2  # Skip both the attribute and the use statement
+                continue
+        
+        # Regular use statement without attribute
+        elif line.startswith('use ') and line.endswith(';'):
+            use_statements.append((None, line))  # No cfg attribute
         else:
             other_lines.append(line)
+        
+        i += 1
     
-    # Parse and group imports by base path
-    grouped_imports = {}
-    special_imports = []
+    # Parse and group imports by base path, preserving cfg attributes
+    grouped_imports = {}  # {base_path: [(cfg_attr, items)]}
+    special_imports = []  # [(cfg_attr, statement)]
     
-    for statement in use_statements:
+    for cfg_attr, statement in use_statements:
         # Remove 'use ' prefix and ';' suffix
         import_path = statement[4:-1].strip()
         
         # Handle special cases like "use super::*"
         if not '::' in import_path or import_path.endswith('::*'):
-            special_imports.append(statement)
+            special_imports.append((cfg_attr, statement))
             continue
         
         # Find the right-most "::" that isn't inside braces
@@ -179,25 +194,48 @@ def streamline_rust_imports(text):
         if base_path not in grouped_imports:
             grouped_imports[base_path] = []
         
-        # Add items without duplicates
+        # Add items with their cfg attribute (if any)
         for item in items:
-            if item and item not in grouped_imports[base_path]:
-                grouped_imports[base_path].append(item)
+            if item:
+                # Check if this item already exists in any cfg group for this base_path
+                exists = False
+                for existing_cfg, existing_items in grouped_imports[base_path]:
+                    if item in existing_items and existing_cfg == cfg_attr:
+                        exists = True
+                        break
+                
+                if not exists:
+                    # Find or create appropriate cfg group
+                    for i, (existing_cfg, existing_items) in enumerate(grouped_imports[base_path]):
+                        if existing_cfg == cfg_attr:
+                            grouped_imports[base_path][i][1].append(item)
+                            break
+                    else:
+                        # No matching cfg group found, create new one
+                        grouped_imports[base_path].append([cfg_attr, [item]])
     
     # Generate streamlined imports
     streamlined_imports = []
     
-    # Add special imports first
-    streamlined_imports.extend(special_imports)
+    # Add special imports first, with their cfg attributes if any
+    for cfg_attr, statement in special_imports:
+        if cfg_attr:
+            streamlined_imports.append(cfg_attr)
+        streamlined_imports.append(statement)
     
-    # Add consolidated imports
-    for base_path, items in sorted(grouped_imports.items()):
-        sorted_items = sorted(items)
-        if len(sorted_items) == 1:
-            streamlined_imports.append(f'use {base_path}::{sorted_items[0]};')
-        else:
-            items_str = ', '.join(sorted_items)
-            streamlined_imports.append(f'use {base_path}::{{{items_str}}};')
+    # Add consolidated imports with their cfg attributes
+    for base_path, cfg_groups in sorted(grouped_imports.items()):
+        for cfg_attr, items in cfg_groups:
+            sorted_items = sorted(items)
+            if len(sorted_items) == 1:
+                if cfg_attr:
+                    streamlined_imports.append(cfg_attr)
+                streamlined_imports.append(f'use {base_path}::{sorted_items[0]};')
+            else:
+                items_str = ', '.join(sorted_items)
+                if cfg_attr:
+                    streamlined_imports.append(cfg_attr)
+                streamlined_imports.append(f'use {base_path}::{{{items_str}}};')
     
     # Combine result
     result = other_lines + streamlined_imports
