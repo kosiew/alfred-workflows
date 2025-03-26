@@ -176,20 +176,51 @@ def streamline_rust_imports(text):
             special_imports.append((cfg_attr, statement))
             continue
         
-        # Find the right-most "::" that isn't inside braces
-        parts = import_path.split('::')
+        # Extract base path (everything before the last :: that's not inside braces)
+        in_brace = False
+        base_path = ""
+        remainder = ""
         
-        # Simple heuristic: check if the last part starts with a brace
-        if parts[-1].startswith('{'):
-            # It's already a grouped import
-            base_path = '::'.join(parts[:-1])
-            items_str = parts[-1][1:-1]  # Remove { }
-            items = [item.strip() for item in items_str.split(',')]
+        # Find the last :: that's not inside braces
+        brace_count = 0
+        for i, char in enumerate(import_path):
+            if char == '{':
+                brace_count += 1
+            elif char == '}':
+                brace_count -= 1
+            elif char == ':' and i + 1 < len(import_path) and import_path[i+1] == ':' and brace_count == 0:
+                base_path = import_path[:i]
+                remainder = import_path[i+2:]  # Skip the ::
+                i += 1  # Skip the next char as we've processed it
+            
+        # If we couldn't parse properly, treat as special
+        if not base_path:
+            special_imports.append((cfg_attr, statement))
+            continue
+        
+        # Process the items part
+        items = []
+        if remainder.startswith('{') and remainder.endswith('}'):
+            # It's a grouped import
+            items_str = remainder[1:-1]  # Remove { }
+            # Split by comma but respect nested braces
+            depth = 0
+            current_item = ""
+            for char in items_str + ',':  # Add comma to handle the last item
+                if char == '{':
+                    depth += 1
+                    current_item += char
+                elif char == '}':
+                    depth -= 1
+                    current_item += char
+                elif char == ',' and depth == 0:
+                    items.append(current_item.strip())
+                    current_item = ""
+                else:
+                    current_item += char
         else:
             # It's a simple import
-            last_part = parts[-1]
-            base_path = '::'.join(parts[:-1])
-            items = [last_part]
+            items = [remainder]
         
         if base_path not in grouped_imports:
             grouped_imports[base_path] = []
@@ -197,7 +228,7 @@ def streamline_rust_imports(text):
         # Add items with their cfg attribute (if any)
         for item in items:
             if item:
-                # Check if this item already exists in any cfg group for this base_path
+                # Check if this item already exists
                 exists = False
                 for existing_cfg, existing_items in grouped_imports[base_path]:
                     if item in existing_items and existing_cfg == cfg_attr:
@@ -206,11 +237,14 @@ def streamline_rust_imports(text):
                 
                 if not exists:
                     # Find or create appropriate cfg group
+                    group_found = False
                     for i, (existing_cfg, existing_items) in enumerate(grouped_imports[base_path]):
                         if existing_cfg == cfg_attr:
                             grouped_imports[base_path][i][1].append(item)
+                            group_found = True
                             break
-                    else:
+                    
+                    if not group_found:
                         # No matching cfg group found, create new one
                         grouped_imports[base_path].append([cfg_attr, [item]])
     
