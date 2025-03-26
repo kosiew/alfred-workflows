@@ -77,6 +77,8 @@ def rename_dalle_files():
         
         recent_file = max(recent_files, key=lambda f: f.stat().st_mtime)
         
+        strip_metadata(recent_file)
+        
         # Run llm to get a short name
         result = shorten(recent_file, 2)
         short_name_base = result
@@ -331,6 +333,22 @@ def remove_python_prints(text):
     
     return '\n'.join(filtered_lines)
 
+def strip_metadata(image_path):
+    """
+    Strips all metadata, including C2PA, from the given image file using exiftool.
+    """
+    if not os.path.exists(image_path):
+        return False, f"File not found: {image_path}"
+
+    try:
+        # Remove metadata and overwrite the original image
+        subprocess.run(['exiftool', '-all=', '-overwrite_original', image_path], check=True)
+        return True, f"Metadata stripped from {image_path}"
+    except subprocess.CalledProcessError as e:
+        return False, f"Error while stripping metadata: {e}"
+    except FileNotFoundError:
+        return False, "Error: exiftool not installed. Install with 'brew install exiftool'"
+
 def do():
     """Main function to handle Alfred workflow input and output."""
     action = sys.argv[1]
@@ -445,6 +463,24 @@ def do():
                 VARIABLES: {
                     MESSAGE: "Debug prints removed!",
                     MESSAGE_TITLE: "Success",
+                },
+            }
+        }
+
+    elif action == "remove_metadata":
+        # Get image path from Alfred environment variable
+        image_path = os.getenv("entry", "").strip()
+        
+        # Strip metadata from the image
+        success, message = strip_metadata(image_path)
+        
+        # Prepare JSON output for Alfred
+        output = {
+            ALFREDWORKFLOW: {
+                ARG: image_path if success else message,
+                VARIABLES: {
+                    MESSAGE: message,
+                    MESSAGE_TITLE: "Success" if success else "Error",
                 },
             }
         }
