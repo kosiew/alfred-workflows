@@ -176,27 +176,34 @@ def streamline_rust_imports(text):
             special_imports.append((cfg_attr, statement))
             continue
         
-        # Extract base path (everything before the last :: that's not inside braces)
-        in_brace = False
-        base_path = ""
-        remainder = ""
+        # Extract the root module path (first part before ::)
+        parts = import_path.split('::')
+        root_module = parts[0]
         
-        # Find the last :: that's not inside braces
-        brace_count = 0
-        for i, char in enumerate(import_path):
-            if char == '{':
-                brace_count += 1
-            elif char == '}':
-                brace_count -= 1
-            elif char == ':' and i + 1 < len(import_path) and import_path[i+1] == ':' and brace_count == 0:
-                base_path = import_path[:i]
-                remainder = import_path[i+2:]  # Skip the ::
-                i += 1  # Skip the next char as we've processed it
-            
-        # If we couldn't parse properly, treat as special
+        # Find all possible base paths, from most specific to least
+        possible_base_paths = []
+        for i in range(1, len(parts)):
+            possible_base_paths.append('::'.join(parts[:i]))
+        
+        # Choose the shortest base path that already exists in our grouped imports
+        # or default to the most specific possible base path
+        base_path = None
+        for path in reversed(possible_base_paths):  # Start from shortest/least specific
+            if path in grouped_imports:
+                base_path = path
+                break
+        
+        if base_path is None and possible_base_paths:
+            base_path = possible_base_paths[0]  # Most specific path
+        
         if not base_path:
-            special_imports.append((cfg_attr, statement))
-            continue
+            base_path = root_module
+            
+        # Calculate the remainder (what comes after the base_path::)
+        if base_path == import_path:
+            remainder = ""  # No remainder
+        else:
+            remainder = import_path[len(base_path) + 2:]  # +2 for the "::"
         
         # Process the items part
         items = []
