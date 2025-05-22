@@ -184,15 +184,25 @@ def streamline_rust_imports(text):
             is_pub = line.startswith("pub use ")
             full_statement = line
             j = i + 1
-            while j < len(lines) and not lines[j].strip().endswith("};"):
-                full_statement += " " + lines[j].strip()
+            # Track brace levels to handle nested braces correctly
+            brace_count = line.count("{") - line.count("}")
+            
+            while j < len(lines) and brace_count > 0:
+                current_line = lines[j].strip()
+                full_statement += " " + current_line
+                brace_count += current_line.count("{") - current_line.count("}")
                 j += 1
-            if j < len(lines):
-                full_statement += " " + lines[j].strip()
+                
+                # Break if we've balanced all braces and have a semicolon
+                if brace_count == 0 and full_statement.endswith(";"):
+                    break
+            
+            if brace_count == 0 and full_statement.endswith(";"):
                 use_statements.append((None, full_statement, is_pub))
-                i = j + 1
+                i = j
                 continue
             else:
+                # If we couldn't properly parse the statement, leave it as-is
                 other_lines.append(line)
                 i += 1
         else:
@@ -213,8 +223,31 @@ def streamline_rust_imports(text):
         if "{" in import_path:
             base_path = import_path[:import_path.index("{")].rstrip("::")
             items_str = import_path[import_path.index("{")+1:-1]
-            # Split items and handle potential whitespace/newlines
-            items = {item.strip() for item in items_str.split(",") if item.strip()}
+            
+            # Improved parsing of nested import items
+            # Process nested curly braces to maintain proper structure
+            items = set()
+            current_item = ""
+            brace_level = 0
+            
+            for char in items_str:
+                if char == '{':
+                    brace_level += 1
+                    current_item += char
+                elif char == '}':
+                    brace_level -= 1
+                    current_item += char
+                elif char == ',' and brace_level == 0:
+                    # Only split at top-level commas
+                    if current_item.strip():
+                        items.add(current_item.strip())
+                    current_item = ""
+                else:
+                    current_item += char
+            
+            # Add the last item if there is one
+            if current_item.strip():
+                items.add(current_item.strip())
         else:
             parts = import_path.split("::")
             base_path = "::".join(parts[:-1])
@@ -239,8 +272,117 @@ def streamline_rust_imports(text):
             if cfg_attr:
                 result.append(cfg_attr)
             prefix = "pub use " if is_pub else "use "
-            items_list = sorted(items)
-            result.append(f"{prefix}{base_path}::{{{', '.join(items_list)}}};")
+            
+            # Sort items while preserving nested structure
+            # Group items by their parent module path if they're nested
+            module_groups = {}
+            simple_items = []
+            has_self = False
+            
+            for item in items:
+                # Handle items with nested braces
+                if "{" in item:
+                    # Extract the module name and its nested items
+                    module_name = item.split("{")[0].strip()
+                    
+                    # Handle special case with 'self'
+                    if module_name == 'self':
+                        simple_items.append('self')
+                        continue
+                        
+                    # Extract nested content handling potential nested braces
+                    brace_level = 0
+                    start_idx = item.index("{") + 1
+                    end_idx = 0
+                    
+                    for i, char in enumerate(item[start_idx:], start=start_idx):
+                        if char == '{':
+                            brace_level += 1
+                        elif char == '}':
+                            if brace_level == 0:
+                                end_idx = i
+                                break
+                            brace_level -= 1
+                    
+                    # If we couldn't properly parse, keep as is
+                    if end_idx == 0:
+                        simple_items.append(item)
+                        continue
+                    
+                    nested_content = item[start_idx:end_idx].strip()
+                    
+                    # Process the nested items with brace awareness
+                    if module_name not in module_groups:
+                        module_groups[module_name] = []
+                        
+                    # Handle comma separation with brace awareness
+                    nested_items = []
+                    current = ""
+                    brace_level = 0
+                    has_nested_self = False
+                    
+                    for char in nested_content:
+                        if char == '{':
+                            brace_level += 1
+                            current += char
+                        elif char == '}':
+                            brace_level -= 1
+                            current += char
+                        elif char == ',' and brace_level == 0:
+                            item = current.strip()
+                            if item:
+                                if item == 'self':
+                                    has_nested_self = True  # Mark that we've seen 'self'
+                                else:
+                                    nested_items.append(item)
+                            current = ""
+                        else:
+                            current += char
+                            
+                    item = current.strip()
+                    if item:
+                        if item == 'self':
+                            has_nested_self = True
+                        else:
+                            nested_items.append(item)
+                    
+                    # Add all non-self items
+                    module_groups[module_name].extend(nested_items)
+                    
+                    # If we found 'self', add it separately to ensure it gets sorted to the end
+                    if has_nested_self:
+                        module_groups[module_name].append('self')
+                else:
+                    simple_items.append(item)
+            
+            # Sort the simple items, ensuring 'self' comes last (Rust convention)
+            sorted_simple_items = sorted([item for item in simple_items if item != 'self'])
+            if 'self' in simple_items:
+                sorted_simple_items.append('self')
+                
+            sorted_items = sorted_simple_items
+            
+            # Then add the sorted nested groups
+            for module in sorted(module_groups.keys()):
+                # Also ensure 'self' comes last in nested groups
+                module_items = module_groups[module]
+                sorted_module_items = sorted([item for item in module_items if item != 'self'])
+                if 'self' in module_items:
+                    sorted_module_items.append('self')
+                    
+                nested_content = ", ".join(sorted_module_items)
+                sorted_items.append(f"{module}{{{nested_content}}}")
+            
+            # For readability and consistency with rustfmt standards:
+            # - Always use multi-line format for complex or longer import lists 
+            # - Keep simpler import groups on a single line
+            if any("{" in item for item in sorted_items) or len(sorted_items) > 2:
+                result.append(f"{prefix}{base_path}::{{")
+                for item in sorted_items:
+                    result.append(f"    {item},")
+                result.append("};")
+            else:
+                result.append(f"{prefix}{base_path}::{{{', '.join(sorted_items)}}};")
 
     if other_lines and result:
         return "\n".join(other_lines + [""] + result)
