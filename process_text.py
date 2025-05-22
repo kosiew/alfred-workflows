@@ -139,7 +139,7 @@ def streamline_rust_imports(text):
     if not text or text.isspace():
         return text
 
-    lines = text.strip().split("\n")
+    lines = text.strip().split('\n')
 
     # Process lines to capture cfg attributes with their use statements
     use_statements = []  # Will contain (cfg_attr, full_statement, is_pub) tuples
@@ -150,45 +150,45 @@ def streamline_rust_imports(text):
         line = lines[i].strip()
 
         # Handle cfg attributes
-        if line.startswith("#[cfg") and i + 1 < len(lines):
+        if line.startswith('#[cfg') and i + 1 < len(lines):
             next_line = lines[i + 1].strip()
-            is_pub = next_line.startswith("pub use ")
-            is_use = next_line.startswith("use ")
+            is_pub = next_line.startswith('pub use ')
+            is_use = next_line.startswith('use ')
 
-            if (is_pub or is_use) and next_line.endswith(";"):
+            if (is_pub or is_use) and next_line.endswith(';'):
                 use_statements.append((line, next_line, is_pub))
                 i += 2
                 continue
-            elif (is_pub or is_use) and "{" in next_line and not next_line.endswith("};"): 
+            elif (is_pub or is_use) and '{' in next_line and not next_line.endswith('};'): 
                 # Multi-line import with cfg attribute
                 full_statement = next_line
                 j = i + 2
-                while j < len(lines) and not lines[j].strip().endswith("};"):
-                    full_statement += " " + lines[j].strip()
+                while j < len(lines) and not lines[j].strip().endswith('};'):
+                    full_statement += ' ' + lines[j].strip()
                     j += 1
                 if j < len(lines):
-                    full_statement += " " + lines[j].strip()
+                    full_statement += ' ' + lines[j].strip()
                     use_statements.append((line, full_statement, is_pub))
                     i = j + 1
                     continue
 
         # Handle single-line imports
-        elif line.startswith("pub use ") and line.endswith(";"):
+        elif line.startswith('pub use ') and line.endswith(';'):
             use_statements.append((None, line, True))
             i += 1
-        elif line.startswith("use ") and line.endswith(";"):
+        elif line.startswith('use ') and line.endswith(';'):
             use_statements.append((None, line, False))
             i += 1
         # Handle multi-line imports
-        elif (line.startswith("pub use ") or line.startswith("use ")) and "{" in line and not line.endswith("};"):
-            is_pub = line.startswith("pub use ")
+        elif (line.startswith('pub use ') or line.startswith('use ')) and '{' in line and not line.endswith('};'):
+            is_pub = line.startswith('pub use ')
             full_statement = line
             j = i + 1
-            while j < len(lines) and not lines[j].strip().endswith("};"):
-                full_statement += " " + lines[j].strip()
+            while j < len(lines) and not lines[j].strip().endswith('};'):
+                full_statement += ' ' + lines[j].strip()
                 j += 1
             if j < len(lines):
-                full_statement += " " + lines[j].strip()
+                full_statement += ' ' + lines[j].strip()
                 use_statements.append((None, full_statement, is_pub))
                 i = j + 1
                 continue
@@ -199,52 +199,149 @@ def streamline_rust_imports(text):
             other_lines.append(line)
             i += 1
 
-    grouped_by_base = {}  # {(base_path, is_pub): {cfg_attr: set(import_items)}}
-    special_imports = []
+    # Dictionary to organize imports by module
+    module_imports = {}  # {(module_name, is_pub): {cfg_attr: {nested_path: set(items)}}}
+    special_imports = []  # Imports that don't follow the standard pattern
 
     for cfg_attr, statement, is_pub in use_statements:
-        prefix_len = 8 if is_pub else 4
-        import_path = statement[prefix_len:-1].strip()
-
-        if "::" not in import_path or import_path.endswith("::*"):
+        prefix = 'pub use ' if is_pub else 'use '
+        
+        # Skip malformed statements
+        if not (statement.startswith(prefix) and statement.endswith(';')):
             special_imports.append((cfg_attr, statement, is_pub))
             continue
-
-        if "{" in import_path:
-            base_path = import_path[:import_path.index("{")].rstrip("::")
-            items_str = import_path[import_path.index("{")+1:-1]
-            # Split items and handle potential whitespace/newlines
-            items = {item.strip() for item in items_str.split(",") if item.strip()}
-        else:
-            parts = import_path.split("::")
-            base_path = "::".join(parts[:-1])
-            items = {parts[-1]}
-
-        key = (base_path, is_pub)
-        if key not in grouped_by_base:
-            grouped_by_base[key] = {}
-
+        
+        # Extract import path without prefix and trailing semicolon
+        import_path = statement[len(prefix):-1].strip()
+        
+        # Skip special imports like glob imports
+        if '::' not in import_path or import_path.endswith('::*'):
+            special_imports.append((cfg_attr, statement, is_pub))
+            continue
+        
+        # Extract the root module (e.g., 'std', 'datafusion', etc.)
+        parts = import_path.split('::', 1)
+        root_module = parts[0]
+        
+        # Initialize the module entry if needed
+        module_key = (root_module, is_pub)
+        if module_key not in module_imports:
+            module_imports[module_key] = {}
+        
+        # Initialize the attribute group if needed
         attr_key = cfg_attr or ""
-        grouped_by_base[key].setdefault(attr_key, set()).update(items)
+        if attr_key not in module_imports[module_key]:
+            module_imports[module_key][attr_key] = {}
+        
+        # Process the rest of the path after the root module
+        if len(parts) > 1 and parts[1].strip():
+            rest_of_path = parts[1].strip()
+            
+            # Handle simple imports like "use std::fmt::Display;"
+            if '{' not in rest_of_path:
+                subparts = rest_of_path.split('::')
+                item = subparts[-1]
+                path = '::'.join(subparts[:-1]) if len(subparts) > 1 else ''
+                
+                if path not in module_imports[module_key][attr_key]:
+                    module_imports[module_key][attr_key][path] = set()
+                module_imports[module_key][attr_key][path].add(item)
+            else:
+                # Handle imports with braces like "use std::{fmt::Display, any::Any};"
+                # This is a simplified implementation that works for common cases
+                
+                # For a cleaner implementation, we split the rest of the path at "{"
+                before_brace, brace_content = rest_of_path.split('{', 1)
+                path_prefix = before_brace.rstrip('::')  # Remove trailing "::" if present
+                
+                # Remove the closing brace and split by commas
+                brace_content = brace_content.rstrip('}')
+                
+                # Split items by commas, but handle nested braces
+                items = []
+                current_item = ""
+                brace_level = 0
+                
+                for char in brace_content:
+                    if char == '{':
+                        brace_level += 1
+                        current_item += char
+                    elif char == '}':
+                        brace_level -= 1
+                        current_item += char
+                    elif char == ',' and brace_level == 0:
+                        items.append(current_item.strip())
+                        current_item = ""
+                    else:
+                        current_item += char
+                
+                if current_item.strip():
+                    items.append(current_item.strip())
+                
+                # Process each item
+                for item in items:
+                    if '::' in item:
+                        # Item with a path, e.g., "fmt::Display"
+                        item_parts = item.split('::', 1)
+                        sub_path = item_parts[0]
+                        
+                        if '{' in item_parts[1]:
+                            # Nested brace, e.g., "fmt::{Display, Formatter}"
+                            nested_path = path_prefix + ('::' if path_prefix else '') + sub_path
+                            nested_content = item_parts[1].strip('{}')
+                            nested_items = [i.strip() for i in nested_content.split(',')]
+                            
+                            if nested_path not in module_imports[module_key][attr_key]:
+                                module_imports[module_key][attr_key][nested_path] = set()
+                            
+                            for nested_item in nested_items:
+                                module_imports[module_key][attr_key][nested_path].add(nested_item)
+                        else:
+                            # Regular path, e.g., "fmt::Display"
+                            full_path = path_prefix + ('::' if path_prefix else '') + sub_path
+                            sub_item = item_parts[1]
+                            
+                            if full_path not in module_imports[module_key][attr_key]:
+                                module_imports[module_key][attr_key][full_path] = set()
+                            
+                            module_imports[module_key][attr_key][full_path].add(sub_item)
+                    else:
+                        # Direct item, e.g., "Any"
+                        if path_prefix not in module_imports[module_key][attr_key]:
+                            module_imports[module_key][attr_key][path_prefix] = set()
+                        
+                        module_imports[module_key][attr_key][path_prefix].add(item)
 
+    # Generate the output
     result = []
-
+    
+    # Add special imports first
     for cfg_attr, stmt, _ in special_imports:
         if cfg_attr:
             result.append(cfg_attr)
         result.append(stmt)
-
-    for (base_path, is_pub), attr_groups in sorted(grouped_by_base.items()):
-        for cfg_attr, items in sorted(attr_groups.items()):
+    
+    # Add consolidated imports
+    for (module, is_pub), attr_groups in sorted(module_imports.items()):
+        for cfg_attr, paths in sorted(attr_groups.items()):
             if cfg_attr:
                 result.append(cfg_attr)
-            prefix = "pub use " if is_pub else "use "
-            items_list = sorted(items)
-            result.append(f"{prefix}{base_path}::{{{', '.join(items_list)}}};")
-
+            
+            prefix = 'pub use ' if is_pub else 'use '
+            import_parts = []
+            
+            for path, items in sorted(paths.items()):
+                sorted_items = sorted(items)
+                if path:
+                    import_parts.append(f"{path}::{{{', '.join(sorted_items)}}}")
+                else:
+                    import_parts.extend(sorted_items)
+            
+            result.append(f"{prefix}{module}::{{{', '.join(import_parts)}}};")
+    
     if other_lines and result:
-        return "\n".join(other_lines + [""] + result)
-    return "\n".join(other_lines + result)
+        return '\n'.join(other_lines + [''] + result)
+    return '\n'.join(other_lines + result)
 
 
 
