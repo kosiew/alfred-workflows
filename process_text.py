@@ -182,44 +182,37 @@ def streamline_rust_imports(text):
         import_path = statement[prefix_len:-1].strip()
 
         # Handle special cases like "use super::*"
-        if not "::" in import_path or import_path.endswith("::*"):
+        if "::" not in import_path or import_path.endswith("::*"):
             special_imports.append((cfg_attr, statement, is_pub))
             continue
 
-        # Extract the root module path (first part before ::)
-        parts = import_path.split("::")
-        root_module = parts[0]
-
-        # Find all possible base paths, from most specific to least
-        possible_base_paths = []
-        for i in range(1, len(parts)):
-            possible_base_paths.append("::".join(parts[:i]))
-
-        # Choose the shortest base path that already exists in our grouped imports
-        # or default to the most specific possible base path
-        base_path = None
-        for path in reversed(possible_base_paths):  # Start from shortest/least specific
-            if path in grouped_imports:
-                base_path = path
-                break
-
-        if base_path is None and possible_base_paths:
-            base_path = possible_base_paths[0]  # Most specific path
-
-        if not base_path:
-            base_path = root_module
-
-        # Calculate the remainder (what comes after the base_path::)
-        if base_path == import_path:
-            remainder = ""  # No remainder
+        # Extract the main module path (before any curly braces)
+        brace_pos = import_path.find("{")
+        if brace_pos != -1:
+            # This is a grouped import like "use std::io::{self, Read, Write};"
+            main_path = import_path[:brace_pos].rstrip("::")
+            items_part = import_path[brace_pos:]
         else:
-            remainder = import_path[len(base_path) + 2 :]  # +2 for the "::"
-
+            # Find the module path - everything up to the last item
+            last_colons_index = import_path.rfind("::")
+            if last_colons_index == -1:
+                # This shouldn't happen since we already checked for "::" above
+                special_imports.append((cfg_attr, statement, is_pub))
+                continue
+            main_path = import_path[:last_colons_index]
+            items_part = import_path[last_colons_index + 2:]
+        
+        # Extract the root module name (first segment before any ::)
+        root_module = main_path.split("::")[0]
+        
+        # Use the root module as the base for grouping
+        base_path = root_module
+        
         # Process the items part
         items = []
-        if remainder.startswith("{") and remainder.endswith("}"):
+        if items_part.startswith("{") and items_part.endswith("}"):
             # It's a grouped import
-            items_str = remainder[1:-1]  # Remove { }
+            items_str = items_part[1:-1]  # Remove { }
             # Split by comma but respect nested braces
             depth = 0
             current_item = ""
@@ -236,8 +229,12 @@ def streamline_rust_imports(text):
                 else:
                     current_item += char
         else:
-            # It's a simple import
-            items = [remainder]
+            # For single item imports, include the rest of the path with the item
+            # This helps preserve the path structure when grouping
+            if main_path != base_path:
+                items = [main_path[len(base_path) + 2:] + "::" + items_part]
+            else:
+                items = [items_part]
 
         # Use tuple of base_path and is_pub as the key to group imports
         group_key = (base_path, is_pub)
@@ -246,7 +243,7 @@ def streamline_rust_imports(text):
 
         # Add items with their cfg attribute (if any)
         for item in items:
-            if item:
+            if item:  # Skip empty items
                 # Check if this item already exists
                 exists = False
                 for existing_cfg, existing_items in grouped_imports[group_key]:
@@ -281,21 +278,33 @@ def streamline_rust_imports(text):
     # Add consolidated imports with their cfg attributes
     for (base_path, is_pub), cfg_groups in sorted(grouped_imports.items()):
         for cfg_attr, items in cfg_groups:
-            sorted_items = sorted(items)
+            # Sort items, but keep empty items at the end
+            non_empty_items = [item for item in items if item]
+            empty_items = [item for item in items if not item]
+            
+            sorted_items = sorted(non_empty_items) + empty_items
+            sorted_items = sorted(non_empty_items) + empty_items
             prefix = "pub use " if is_pub else "use "
 
-            if len(sorted_items) == 1:
+            if len(sorted_items) == 1 and not sorted_items[0]:
+                # Direct module import
+                if cfg_attr:
+                    streamlined_imports.append(cfg_attr)
+                streamlined_imports.append(f"{prefix}{base_path};")
+            elif len(sorted_items) == 1:
+                # Single item import
                 if cfg_attr:
                     streamlined_imports.append(cfg_attr)
                 streamlined_imports.append(f"{prefix}{base_path}::{sorted_items[0]};")
             else:
+                # Grouped import
                 items_str = ", ".join(sorted_items)
                 if cfg_attr:
                     streamlined_imports.append(cfg_attr)
                 streamlined_imports.append(f"{prefix}{base_path}::{{{items_str}}};")
 
     # Combine result
-    result = other_lines + streamlined_imports
+    result = other_lines + [""] + streamlined_imports if streamlined_imports and other_lines else other_lines + streamlined_imports
     return "\n".join(result)
 
 
