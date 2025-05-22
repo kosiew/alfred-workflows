@@ -142,170 +142,110 @@ def streamline_rust_imports(text):
     lines = text.strip().split("\n")
 
     # Process lines to capture cfg attributes with their use statements
-    use_statements = []  # Will contain (cfg_attr, use_statement, is_pub) tuples
+    use_statements = []  # Will contain (cfg_attr, full_statement, is_pub) tuples
     other_lines = []
     i = 0
 
     while i < len(lines):
         line = lines[i].strip()
 
-        # Check if this is a cfg attribute that might be attached to a use statement
+        # Handle cfg attributes
         if line.startswith("#[cfg") and i + 1 < len(lines):
             next_line = lines[i + 1].strip()
-            is_pub = next_line.startswith("pub use ") and next_line.endswith(";")
-            is_use = next_line.startswith("use ") and next_line.endswith(";")
+            is_pub = next_line.startswith("pub use ")
+            is_use = next_line.startswith("use ")
 
-            if is_pub or is_use:
-                cfg_attr = line
-                use_stmt = next_line
-                use_statements.append((cfg_attr, use_stmt, is_pub))
-                i += 2  # Skip both the attribute and the use statement
+            if (is_pub or is_use) and next_line.endswith(";"):
+                use_statements.append((line, next_line, is_pub))
+                i += 2
                 continue
+            elif (is_pub or is_use) and "{" in next_line and not next_line.endswith("};"): 
+                # Multi-line import with cfg attribute
+                full_statement = next_line
+                j = i + 2
+                while j < len(lines) and not lines[j].strip().endswith("};"):
+                    full_statement += " " + lines[j].strip()
+                    j += 1
+                if j < len(lines):
+                    full_statement += " " + lines[j].strip()
+                    use_statements.append((line, full_statement, is_pub))
+                    i = j + 1
+                    continue
 
-        # Regular use statement without attribute
+        # Handle single-line imports
         elif line.startswith("pub use ") and line.endswith(";"):
-            use_statements.append((None, line, True))  # pub use statement
+            use_statements.append((None, line, True))
+            i += 1
         elif line.startswith("use ") and line.endswith(";"):
-            use_statements.append((None, line, False))  # regular use statement
+            use_statements.append((None, line, False))
+            i += 1
+        # Handle multi-line imports
+        elif (line.startswith("pub use ") or line.startswith("use ")) and "{" in line and not line.endswith("};"):
+            is_pub = line.startswith("pub use ")
+            full_statement = line
+            j = i + 1
+            while j < len(lines) and not lines[j].strip().endswith("};"):
+                full_statement += " " + lines[j].strip()
+                j += 1
+            if j < len(lines):
+                full_statement += " " + lines[j].strip()
+                use_statements.append((None, full_statement, is_pub))
+                i = j + 1
+                continue
+            else:
+                other_lines.append(line)
+                i += 1
         else:
             other_lines.append(line)
+            i += 1
 
-        i += 1
-
-    # Parse and group imports by base path and pub status
-    grouped_imports = {}  # {(base_path, is_pub): [(cfg_attr, items)]}
-    special_imports = []  # [(cfg_attr, statement, is_pub)]
+    grouped_by_base = {}  # {(base_path, is_pub): {cfg_attr: set(import_items)}}
+    special_imports = []
 
     for cfg_attr, statement, is_pub in use_statements:
-        # Remove 'use ' or 'pub use ' prefix and ';' suffix
-        prefix_len = 8 if is_pub else 4  # 'pub use ' vs 'use '
+        prefix_len = 8 if is_pub else 4
         import_path = statement[prefix_len:-1].strip()
 
-        # Handle special cases like "use super::*"
         if "::" not in import_path or import_path.endswith("::*"):
             special_imports.append((cfg_attr, statement, is_pub))
             continue
 
-        # Extract the main module path (before any curly braces)
-        brace_pos = import_path.find("{")
-        if brace_pos != -1:
-            # This is a grouped import like "use std::io::{self, Read, Write};"
-            main_path = import_path[:brace_pos].rstrip("::")
-            items_part = import_path[brace_pos:]
+        if "{" in import_path:
+            base_path = import_path[:import_path.index("{")].rstrip("::")
+            items_str = import_path[import_path.index("{")+1:-1]
+            # Split items and handle potential whitespace/newlines
+            items = {item.strip() for item in items_str.split(",") if item.strip()}
         else:
-            # Find the module path - everything up to the last item
-            last_colons_index = import_path.rfind("::")
-            if last_colons_index == -1:
-                # This shouldn't happen since we already checked for "::" above
-                special_imports.append((cfg_attr, statement, is_pub))
-                continue
-            main_path = import_path[:last_colons_index]
-            items_part = import_path[last_colons_index + 2:]
-        
-        # Extract the root module name (first segment before any ::)
-        root_module = main_path.split("::")[0]
-        
-        # Use the root module as the base for grouping
-        base_path = root_module
-        
-        # Process the items part
-        items = []
-        if items_part.startswith("{") and items_part.endswith("}"):
-            # It's a grouped import
-            items_str = items_part[1:-1]  # Remove { }
-            # Split by comma but respect nested braces
-            depth = 0
-            current_item = ""
-            for char in items_str + ",":  # Add comma to handle the last item
-                if char == "{":
-                    depth += 1
-                    current_item += char
-                elif char == "}":
-                    depth -= 1
-                    current_item += char
-                elif char == "," and depth == 0:
-                    items.append(current_item.strip())
-                    current_item = ""
-                else:
-                    current_item += char
-        else:
-            # For single item imports, include the rest of the path with the item
-            # This helps preserve the path structure when grouping
-            if main_path != base_path:
-                items = [main_path[len(base_path) + 2:] + "::" + items_part]
-            else:
-                items = [items_part]
+            parts = import_path.split("::")
+            base_path = "::".join(parts[:-1])
+            items = {parts[-1]}
 
-        # Use tuple of base_path and is_pub as the key to group imports
-        group_key = (base_path, is_pub)
-        if group_key not in grouped_imports:
-            grouped_imports[group_key] = []
+        key = (base_path, is_pub)
+        if key not in grouped_by_base:
+            grouped_by_base[key] = {}
 
-        # Add items with their cfg attribute (if any)
-        for item in items:
-            if item:  # Skip empty items
-                # Check if this item already exists
-                exists = False
-                for existing_cfg, existing_items in grouped_imports[group_key]:
-                    if item in existing_items and existing_cfg == cfg_attr:
-                        exists = True
-                        break
+        attr_key = cfg_attr or ""
+        grouped_by_base[key].setdefault(attr_key, set()).update(items)
 
-                if not exists:
-                    # Find or create appropriate cfg group
-                    group_found = False
-                    for i, (existing_cfg, existing_items) in enumerate(
-                        grouped_imports[group_key]
-                    ):
-                        if existing_cfg == cfg_attr:
-                            grouped_imports[group_key][i][1].append(item)
-                            group_found = True
-                            break
+    result = []
 
-                    if not group_found:
-                        # No matching cfg group found, create new one
-                        grouped_imports[group_key].append([cfg_attr, [item]])
-
-    # Generate streamlined imports
-    streamlined_imports = []
-
-    # Add special imports first, with their cfg attributes if any
-    for cfg_attr, statement, is_pub in special_imports:
+    for cfg_attr, stmt, _ in special_imports:
         if cfg_attr:
-            streamlined_imports.append(cfg_attr)
-        streamlined_imports.append(statement)
+            result.append(cfg_attr)
+        result.append(stmt)
 
-    # Add consolidated imports with their cfg attributes
-    for (base_path, is_pub), cfg_groups in sorted(grouped_imports.items()):
-        for cfg_attr, items in cfg_groups:
-            # Sort items, but keep empty items at the end
-            non_empty_items = [item for item in items if item]
-            empty_items = [item for item in items if not item]
-            
-            sorted_items = sorted(non_empty_items) + empty_items
-            sorted_items = sorted(non_empty_items) + empty_items
+    for (base_path, is_pub), attr_groups in sorted(grouped_by_base.items()):
+        for cfg_attr, items in sorted(attr_groups.items()):
+            if cfg_attr:
+                result.append(cfg_attr)
             prefix = "pub use " if is_pub else "use "
+            items_list = sorted(items)
+            result.append(f"{prefix}{base_path}::{{{', '.join(items_list)}}};")
 
-            if len(sorted_items) == 1 and not sorted_items[0]:
-                # Direct module import
-                if cfg_attr:
-                    streamlined_imports.append(cfg_attr)
-                streamlined_imports.append(f"{prefix}{base_path};")
-            elif len(sorted_items) == 1:
-                # Single item import
-                if cfg_attr:
-                    streamlined_imports.append(cfg_attr)
-                streamlined_imports.append(f"{prefix}{base_path}::{sorted_items[0]};")
-            else:
-                # Grouped import
-                items_str = ", ".join(sorted_items)
-                if cfg_attr:
-                    streamlined_imports.append(cfg_attr)
-                streamlined_imports.append(f"{prefix}{base_path}::{{{items_str}}};")
+    if other_lines and result:
+        return "\n".join(other_lines + [""] + result)
+    return "\n".join(other_lines + result)
 
-    # Combine result
-    result = other_lines + [""] + streamlined_imports if streamlined_imports and other_lines else other_lines + streamlined_imports
-    return "\n".join(result)
 
 
 def streamline_python_imports(text):
@@ -655,13 +595,8 @@ def do():
             }
         }
 
-    elif action == "rename_dalle_file":  # newly added action branch
+    elif action == "rename_dalle_file":  # newly added action branch= "__main__":
         output = rename_dalle_files()
 
     output_json(output)
-
-
-if __name__ == "__main__":
-    do()
-
-# github repo alfred-workflows
+if __name__ == "__main__":    do()# github repo alfred-workflows
