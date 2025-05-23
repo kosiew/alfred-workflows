@@ -220,8 +220,13 @@ def streamline_rust_imports(text):
             special_imports.append((cfg_attr, statement, is_pub))
             continue
 
+        # Extract the module and path components for better grouping
+        parts = import_path.split("::")
+        
+        # For imports with curly braces like `std::io::{Read, Write}`
         if "{" in import_path:
-            base_path = import_path[:import_path.index("{")].rstrip("::")
+            # Get everything before the curly brace as the base path
+            full_path = import_path[:import_path.index("{")].rstrip("::")
             items_str = import_path[import_path.index("{")+1:-1]
             
             # Improved parsing of nested import items
@@ -248,10 +253,49 @@ def streamline_rust_imports(text):
             # Add the last item if there is one
             if current_item.strip():
                 items.add(current_item.strip())
+                
+            # Extract the top-level module and remaining path for better grouping
+            path_parts = full_path.split("::")
+            
+            # For imports like datafusion_datasource::file::{FileSource}
+            # We want to group by the top-level module (datafusion_datasource)
+            top_level_module = path_parts[0]
+            
+            if len(path_parts) > 1:
+                # Get submodule path (like "file" or "file_scan_config")
+                submodule_path = "::".join(path_parts[1:])
+                
+                # Format each item to include its submodule
+                formatted_items = set()
+                for item in items:
+                    formatted_items.add(f"{submodule_path}::{{{item}}}")
+                
+                # Use the top-level module for grouping
+                base_path = top_level_module
+                items = formatted_items
+            else:
+                # For simple cases like std::{io, fmt}
+                base_path = full_path
         else:
-            parts = import_path.split("::")
-            base_path = "::".join(parts[:-1])
-            items = {parts[-1]}
+            # For simple imports like `std::io::Read`
+            if len(parts) >= 2:
+                # Get the root module for better grouping
+                root_module = parts[0]
+                
+                if len(parts) == 2:
+                    # For simple two-part paths
+                    base_path = root_module
+                    items = {f"{parts[1]}"}
+                else:
+                    # For longer paths, group by top module and preserve submodule structure
+                    base_path = root_module
+                    submodule_path = "::".join(parts[1:-1])
+                    item_name = parts[-1]
+                    items = {f"{submodule_path}::{item_name}"}
+            else:
+                # Fallback for unusual cases
+                base_path = "::".join(parts[:-1]) if len(parts) > 1 else parts[0]
+                items = {parts[-1]}
 
         key = (base_path, is_pub)
         if key not in grouped_by_base:
@@ -280,78 +324,95 @@ def streamline_rust_imports(text):
             has_self = False
             
             for item in items:
-                # Handle items with nested braces
-                if "{" in item:
-                    # Extract the module name and its nested items
-                    module_name = item.split("{")[0].strip()
-                    
-                    # Handle special case with 'self'
-                    if module_name == 'self':
-                        simple_items.append('self')
-                        continue
+                # Handle items with nested braces or module paths
+                if "::" in item or "{" in item:
+                    # Check if this is a submodule path with nested items
+                    if "{" in item:
+                        # Extract the module name and its nested items
+                        module_name = item.split("{")[0].strip()
                         
-                    # Extract nested content handling potential nested braces
-                    brace_level = 0
-                    start_idx = item.index("{") + 1
-                    end_idx = 0
-                    
-                    for i, char in enumerate(item[start_idx:], start=start_idx):
-                        if char == '{':
-                            brace_level += 1
-                        elif char == '}':
-                            if brace_level == 0:
-                                end_idx = i
-                                break
-                            brace_level -= 1
-                    
-                    # If we couldn't properly parse, keep as is
-                    if end_idx == 0:
-                        simple_items.append(item)
-                        continue
-                    
-                    nested_content = item[start_idx:end_idx].strip()
-                    
-                    # Process the nested items with brace awareness
-                    if module_name not in module_groups:
-                        module_groups[module_name] = []
-                        
-                    # Handle comma separation with brace awareness
-                    nested_items = []
-                    current = ""
-                    brace_level = 0
-                    has_nested_self = False
-                    
-                    for char in nested_content:
-                        if char == '{':
-                            brace_level += 1
-                            current += char
-                        elif char == '}':
-                            brace_level -= 1
-                            current += char
-                        elif char == ',' and brace_level == 0:
-                            item = current.strip()
-                            if item:
-                                if item == 'self':
-                                    has_nested_self = True  # Mark that we've seen 'self'
-                                else:
-                                    nested_items.append(item)
-                            current = ""
-                        else:
-                            current += char
+                        # Handle special case with 'self'
+                        if module_name == 'self':
+                            simple_items.append('self')
+                            continue
                             
-                    item = current.strip()
-                    if item:
-                        if item == 'self':
-                            has_nested_self = True
+                        # Extract nested content handling potential nested braces
+                        brace_level = 0
+                        start_idx = item.index("{") + 1
+                        end_idx = 0
+                        
+                        for i, char in enumerate(item[start_idx:], start=start_idx):
+                            if char == '{':
+                                brace_level += 1
+                            elif char == '}':
+                                if brace_level == 0:
+                                    end_idx = i
+                                    break
+                                brace_level -= 1
+                        
+                        # If we couldn't properly parse, keep as is
+                        if end_idx == 0:
+                            simple_items.append(item)
+                            continue
+                        
+                        nested_content = item[start_idx:end_idx].strip()
+                        
+                        # Process the nested items with brace awareness
+                        if module_name not in module_groups:
+                            module_groups[module_name] = []
+                            
+                        # Handle comma separation with brace awareness
+                        nested_items = []
+                        current = ""
+                        brace_level = 0
+                        has_nested_self = False
+                        
+                        for char in nested_content:
+                            if char == '{':
+                                brace_level += 1
+                                current += char
+                            elif char == '}':
+                                brace_level -= 1
+                                current += char
+                            elif char == ',' and brace_level == 0:
+                                item = current.strip()
+                                if item:
+                                    if item == 'self':
+                                        has_nested_self = True  # Mark that we've seen 'self'
+                                    else:
+                                        nested_items.append(item)
+                                current = ""
+                            else:
+                                current += char
+                                
+                        item = current.strip()
+                        if item:
+                            if item == 'self':
+                                has_nested_self = True
+                            else:
+                                nested_items.append(item)
+                        
+                        # Add all non-self items
+                        module_groups[module_name].extend(nested_items)
+                        
+                        # If we found 'self', add it separately to ensure it gets sorted to the end
+                        if has_nested_self:
+                            module_groups[module_name].append('self')
+                    else:
+                        # This is a module path (like "io::Read" or "file_scan_config::FileScanConfig")
+                        # Extract the module name and member
+                        parts = item.split("::")
+                        if len(parts) >= 2:
+                            module_name = parts[0]
+                            item_name = "::".join(parts[1:])
+                            
+                            if module_name not in module_groups:
+                                module_groups[module_name] = []
+                            
+                            module_groups[module_name].append(item_name)
                         else:
-                            nested_items.append(item)
-                    
-                    # Add all non-self items
-                    module_groups[module_name].extend(nested_items)
-                    
-                    # If we found 'self', add it separately to ensure it gets sorted to the end
-                    if has_nested_self:
-                        module_groups[module_name].append('self')
+                            # Fall back for unusual formats
+                            simple_items.append(item)
                 else:
                     simple_items.append(item)
             
