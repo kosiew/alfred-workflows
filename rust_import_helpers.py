@@ -153,7 +153,8 @@ def process_import_with_braces(import_path):
         # Format each item to include its submodule
         formatted_items = set()
         for item in items:
-            formatted_items.add(f"{submodule_path}::{{{item}}}")
+            # Don't add additional braces around the item
+            formatted_items.add(f"{submodule_path}::{item}")
         
         # Use the top-level module for grouping
         base_path = top_level_module
@@ -307,7 +308,7 @@ def organize_items_by_module(items):
             # Check if this is a submodule path with nested items
             if "{" in item:
                 # Extract the module name and its nested items
-                module_name = item.split("{")[0].strip()
+                module_name = item.split("{")[0].strip().rstrip(":")
                 
                 # Handle special case with 'self'
                 if module_name == 'self':
@@ -388,8 +389,13 @@ def format_module_groups(module_groups):
         if 'self' in module_items:
             sorted_module_items.append('self')
         
-        nested_content = ", ".join(sorted_module_items)
-        sorted_items.append(f"{module}{{{nested_content}}}")
+        # Handle single item case without adding unnecessary braces
+        if len(sorted_module_items) == 1:
+            # For single items, don't add braces no matter what
+            sorted_items.append(f"{module}::{sorted_module_items[0]}")
+        else:
+            nested_content = ", ".join(sorted_module_items)
+            sorted_items.append(f"{module}::{{{nested_content}}}")
     
     return sorted_items
 
