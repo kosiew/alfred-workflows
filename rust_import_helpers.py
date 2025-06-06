@@ -338,16 +338,16 @@ def organize_items_by_module(items):
                 
                 # Process the nested items with brace awareness
                 if module_name not in module_groups:
-                    module_groups[module_name] = []
+                    module_groups[module_name] = set()
                 
                 nested_items, has_nested_self = process_nested_module_items(nested_content)
                 
-                # Add all non-self items
-                module_groups[module_name].extend(nested_items)
+                # Add all non-self items (using set to avoid duplicates)
+                module_groups[module_name].update(nested_items)
                 
                 # If we found 'self', add it separately to ensure it gets sorted to the end
                 if has_nested_self:
-                    module_groups[module_name].append('self')
+                    module_groups[module_name].add('self')
             else:
                 # This is a module path (like "io::Read" or "file_scan_config::FileScanConfig")
                 # Extract the module name and member
@@ -357,9 +357,9 @@ def organize_items_by_module(items):
                     item_name = "::".join(parts[1:])
                     
                     if module_name not in module_groups:
-                        module_groups[module_name] = []
+                        module_groups[module_name] = set()
                     
-                    module_groups[module_name].append(item_name)
+                    module_groups[module_name].add(item_name)
                 else:
                     # Fall back for unusual formats
                     simple_items.append(item)
