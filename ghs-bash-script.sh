@@ -81,6 +81,12 @@ while IFS= read -r REPO_INFO; do
         \"mods\": {\"cmd\": {\"subtitle\": \"⌘: Copy Issues URL to clipboard\", \"arg\": \"https://github.com/$REPO_NAME/issues\"}}
       },
       {
+        \"title\": \"$REPO_NAME New Issue\",
+        \"subtitle\": \"New Issue\",
+        \"arg\": \"https://github.com/$REPO_NAME/issues/new/choose\",
+        \"mods\": {\"cmd\": {\"subtitle\": \"⌘: Copy Issues URL to clipboard\", \"arg\": \"https://github.com/$REPO_NAME/issues/new/choose\"}}
+      },
+      {
         \"title\": \"$REPO_NAME Issue Number\",
         \"subtitle\": \"View Issue number\",
         \"arg\": \"https://github.com/$REPO_NAME/issues/var:num\",
@@ -97,6 +103,12 @@ while IFS= read -r REPO_INFO; do
         \"subtitle\": \"View Pull Requests\",
         \"arg\": \"https://github.com/$REPO_NAME/pulls\",
         \"mods\": {\"cmd\": {\"subtitle\": \"⌘: Copy Pull Requests URL to clipboard\", \"arg\": \"https://github.com/$REPO_NAME/pulls\"}}
+      },
+      {
+        \"title\": \"$REPO_NAME New PR\",
+        \"subtitle\": \"New Pull Request\",
+        \"arg\": \"https://github.com/$REPO_NAME/compare\",
+        \"mods\": {\"cmd\": {\"subtitle\": \"⌘: Copy Pull Requests URL to clipboard\", \"arg\": \"https://github.com/$REPO_NAME/compare\"}}
       },
       {
         \"title\": \"$REPO_NAME PR number\",
