@@ -81,6 +81,12 @@ while IFS= read -r REPO_INFO; do
         \"mods\": {\"cmd\": {\"subtitle\": \"⌘: Copy Issues URL to clipboard\", \"arg\": \"https://github.com/$REPO_NAME/issues\"}}
       },
       {
+        \"title\": \"$REPO_NAME Issue Number\",
+        \"subtitle\": \"View Issue number\",
+        \"arg\": \"https://github.com/$REPO_NAME/issues/var:num\",
+        \"mods\": {\"cmd\": {\"subtitle\": \"⌘: Copy Issues URL to clipboard\", \"arg\": \"https://github.com/$REPO_NAME/issues/var:num\"}}
+      },
+      {
         \"title\": \"$REPO_NAME Open bugs\",
         \"subtitle\": \"View Bug Issues\",
         \"arg\": \"https://github.com/$REPO_NAME/issues?q=is%3Aopen+is%3Aissue+label%3Abug\",
