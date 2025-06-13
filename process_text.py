@@ -483,6 +483,28 @@ def strip_metadata(image_path):
         )
 
 
+def split_text_at_string(input_text, search_string):
+    """
+    Split input text around a search string.
+    
+    Args:
+        input_text: The text to split
+        search_string: The string to split at
+    
+    Returns:
+        tuple: (pre, post)
+            - pre: Text before the search string (or entire input if not found)
+            - post: Text after the search string (or empty string if not found)
+    """
+    if search_string in input_text:
+        pre, post = input_text.split(search_string, 1)
+    else:
+        pre = input_text
+        post = ""
+    
+    return pre, post
+
+
 def do():
     """Main function to handle Alfred workflow input and output."""
     action = sys.argv[1]
@@ -621,6 +643,28 @@ def do():
 
     elif action == "rename_dalle_file":  # newly added action branch= "__main__":
         output = rename_dalle_files()
+        
+    elif action == "check_string_match":
+        # Get input text and search string from Alfred environment variables
+        input_text = os.getenv("entry", "").strip()
+        search_string = os.getenv("search_string", "").strip()
+
+        pre, post = split_text_at_string(input_text, search_string)
+        result = "Y" if post else "N"
+
+        # Prepare JSON output for Alfred
+        output = {
+            ALFREDWORKFLOW: {
+                ARG: result,
+                VARIABLES: {
+                    MESSAGE: f"Text split at: {search_string}",
+                    MESSAGE_TITLE: "String Split",
+                    "pre": pre,
+                    "post": post,
+                },
+            }
+        }
+        
 
     output_json(output)
 if __name__ == "__main__":    do()# github repo alfred-workflows
