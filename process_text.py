@@ -505,6 +505,20 @@ def split_text_at_string(input_text, search_string):
     return pre, post
 
 
+def check_string_match(input_text, search_string):
+    """
+    Check if search string exists in input text.
+    
+    Args:
+        input_text: The text to search in
+        search_string: The string to search for
+    
+    Returns:
+        str: "Y" if search string is found, "N" if not found
+    """
+    return "Y" if search_string in input_text else "N"
+
+
 def do():
     """Main function to handle Alfred workflow input and output."""
     action = sys.argv[1]
@@ -649,22 +663,38 @@ def do():
         input_text = os.getenv("entry", "").strip()
         search_string = os.getenv("search_string", "").strip()
 
-        pre, post = split_text_at_string(input_text, search_string)
-        result = "Y" if post else "N"
+        result = check_string_match(input_text, search_string)
 
         # Prepare JSON output for Alfred
         output = {
             ALFREDWORKFLOW: {
                 ARG: result,
                 VARIABLES: {
-                    MESSAGE: f"Text split at: {search_string}",
-                    MESSAGE_TITLE: "String Split",
-                    "pre": pre,
-                    "post": post,
+                    MESSAGE: f"{result} - '{search_string}' in input",
+                    MESSAGE_TITLE: "Check String Match",
                 },
             }
         }
         
+    elif action == "substitute_search_string":
+        # Get input text and search string from Alfred environment variables
+        input_text = os.getenv("entry", "").strip()
+        search_string = os.getenv("search_string", "").strip()
+        replace_with = sys.argv[2]
+
+        # Replace all occurrences of search_string with replace_with
+        result_text = input_text.replace(search_string, replace_with)
+
+        # Prepare JSON output for Alfred
+        output = {
+            ALFREDWORKFLOW: {
+                ARG: result_text,
+                VARIABLES: {
+                    MESSAGE: f"Replaced '{search_string}' with '{replace_with}'",
+                    MESSAGE_TITLE: "String Substitution",
+                },
+            }
+        }
 
     output_json(output)
 if __name__ == "__main__":    do()# github repo alfred-workflows
