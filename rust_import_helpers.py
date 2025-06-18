@@ -440,7 +440,10 @@ def generate_import_statements(grouped_by_base, special_imports):
             
             # Format the final import statement
             # For readability and consistency with rustfmt standards
-            if any("{" in item for item in sorted_items) or len(sorted_items) > 2:
+            if len(sorted_items) == 1:
+                # Single item - no braces needed
+                result.append(f"{prefix}{base_path}::{sorted_items[0]};")
+            elif any("{" in item for item in sorted_items) or len(sorted_items) > 2:
                 result.append(f"{prefix}{base_path}::{{")
                 for item in sorted_items:
                     result.append(f"    {item},")
