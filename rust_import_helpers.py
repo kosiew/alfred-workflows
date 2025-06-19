@@ -199,40 +199,6 @@ def process_simple_import(parts):
     return base_path, items
 
 
-def process_wildcard_import(parts):
-    """
-    Process a wildcard import statement like 'arrow::array::*'.
-    
-    Args:
-        parts: List of parts from splitting the import path by '::'
-    
-    Returns:
-        tuple: (base_path, items)
-            - base_path: Base module path
-            - items: Set of import items
-    """
-    # For wildcard imports like `arrow::array::*`
-    if len(parts) >= 2 and parts[-1] == "*":
-        # Get the root module for grouping
-        root_module = parts[0]
-        
-        if len(parts) == 2:
-            # For simple two-part paths like `std::*`
-            base_path = root_module
-            items = {"*"}
-        else:
-            # For longer paths like `arrow::array::*`, group by top module
-            base_path = root_module
-            submodule_path = "::".join(parts[1:-1])
-            items = {f"{submodule_path}::*"}
-    else:
-        # Fallback for unusual cases
-        base_path = "::".join(parts[:-1]) if len(parts) > 1 else parts[0]
-        items = {parts[-1]}
-    
-    return base_path, items
-
-
 def group_imports_by_base_path(use_statements):
     """
     Group imports by their base path.
@@ -252,7 +218,7 @@ def group_imports_by_base_path(use_statements):
         prefix_len = 8 if is_pub else 4
         import_path = statement[prefix_len:-1].strip()
 
-        if "::" not in import_path:
+        if "::" not in import_path or import_path.endswith("::*"):
             special_imports.append((cfg_attr, statement, is_pub))
             continue
 
@@ -262,9 +228,6 @@ def group_imports_by_base_path(use_statements):
         # For imports with curly braces like `std::io::{Read, Write}`
         if "{" in import_path:
             base_path, items = process_import_with_braces(import_path)
-        # For wildcard imports like `arrow::array::*`
-        elif import_path.endswith("::*"):
-            base_path, items = process_wildcard_import(parts)
         else:
             base_path, items = process_simple_import(parts)
 
