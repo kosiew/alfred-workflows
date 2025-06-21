@@ -5,7 +5,7 @@ import os
 import subprocess  # newly added
 from pathlib import Path  # newly added
 import time  # newly added
-from python_import_helpers import streamline_python_imports
+from python_import_helpers import parse_python_import_statements, generate_python_import_statements
 
 # Constants for Alfred workflow
 ITEMS = "items"
@@ -310,6 +310,23 @@ def check_string_match(input_text, search_string):
         str: "Y" if search string is found, "N" if not found
     """
     return "Y" if search_string in input_text else "N"
+
+
+def streamline_python_imports(text):
+    """Streamlines Python import statements by consolidating imports from the same module."""
+    if not text or text.isspace():
+        return text
+
+    # Split the text into lines
+    lines = text.strip().split("\n")
+    
+    # Parse the import statements
+    simple_imports, from_imports = parse_python_import_statements(lines)
+    
+    # Generate the consolidated import statements
+    result = generate_python_import_statements(simple_imports, from_imports)
+    
+    return "\n".join(result)
 
 
 def do():

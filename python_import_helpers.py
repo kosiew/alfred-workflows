@@ -200,18 +200,4 @@ def generate_python_import_statements(simple_imports, from_imports):
     return result
 
 
-def streamline_python_imports(text):
-    """Streamlines Python import statements by consolidating imports from the same module."""
-    if not text or text.isspace():
-        return text
 
-    # Split the text into lines
-    lines = text.strip().split("\n")
-    
-    # Parse the import statements
-    simple_imports, from_imports = parse_python_import_statements(lines)
-    
-    # Generate the consolidated import statements
-    result = generate_python_import_statements(simple_imports, from_imports)
-    
-    return "\n".join(result)
