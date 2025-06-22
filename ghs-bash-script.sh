@@ -69,28 +69,57 @@ SPECIFIC_REPOS=$(check_specific_repos)
 HARDCODED_REPOS="apache/datafusion|Apache DataFusion is a very fast, extensible query engine for building high-quality data-centric systems in Rust, using the Apache Arrow in-memory format.|false
 apache/datafusion-python|Python bindings for Apache DataFusion|false"
 
-# DEBUG: Output raw data to stderr to see what we're getting
-echo "DEBUG USER_REPOS count:" $(echo "$USER_REPOS" | wc -l) >&2
-echo "DEBUG STARRED_REPOS count:" $(echo "$STARRED_REPOS" | wc -l) >&2
-echo "DEBUG SPECIFIC_REPOS:" >&2
-echo "$SPECIFIC_REPOS" >&2
-echo "DEBUG HARDCODED_REPOS:" >&2
-echo "$HARDCODED_REPOS" >&2
+# DEBUG: Check if specific repos are in each data source
+echo "DEBUG: Checking for apache/datafusion and apache/datafusion-python..." >&2
+echo "In USER_REPOS:" >&2
+echo "$USER_REPOS" | grep -i "apache/datafusion" >&2
+echo "In STARRED_REPOS:" >&2
+echo "$STARRED_REPOS" | grep -i "apache/datafusion" >&2
+echo "In ORG_REPOS:" >&2
+echo "$ORG_REPOS" | grep -i "apache/datafusion" >&2
+echo "In SPECIFIC_REPOS:" >&2
+echo "$SPECIFIC_REPOS" | grep -i "apache/datafusion" >&2
+echo "In HARDCODED_REPOS:" >&2
+echo "$HARDCODED_REPOS" | grep -i "apache/datafusion" >&2
 
 # Combine all repositories and remove duplicates by repo name (first field)
 ALL_REPOS_RAW=$(echo -e "$USER_REPOS\n$STARRED_REPOS\n$ORG_REPOS\n$SPECIFIC_REPOS\n$HARDCODED_REPOS")
+
+# DEBUG: Check if repos are in combined raw data
+echo "DEBUG: In ALL_REPOS_RAW:" >&2
+echo "$ALL_REPOS_RAW" | grep -i "apache/datafusion" >&2
 
 # Remove duplicates by repository name (keeping the first occurrence)
 # This handles cases where a repo appears in multiple sources (user, starred, org)
 ALL_REPOS_UNIQUE=$(echo "$ALL_REPOS_RAW" | awk -F'|' '!seen[$1]++' | grep -v '^$')
 
+# DEBUG: Check if repos survived deduplication
+echo "DEBUG: In ALL_REPOS_UNIQUE:" >&2
+echo "$ALL_REPOS_UNIQUE" | grep -i "apache/datafusion" >&2
+
 # Separate forked and non-forked repositories
 NON_FORKED_REPOS=$(echo "$ALL_REPOS_UNIQUE" | grep -v '|true$')
 FORKED_REPOS=$(echo "$ALL_REPOS_UNIQUE" | grep '|true$')
 
+# DEBUG: Check which category they're in
+echo "DEBUG: In NON_FORKED_REPOS:" >&2
+echo "$NON_FORKED_REPOS" | grep -i "apache/datafusion" >&2
+echo "DEBUG: In FORKED_REPOS:" >&2
+echo "$FORKED_REPOS" | grep -i "apache/datafusion" >&2
+
 # Combine and filter repositories with non-forked first
 ALL_REPOS=$(echo -e "$NON_FORKED_REPOS\n$FORKED_REPOS")
+
+# DEBUG: Check final combined list before query filtering
+echo "DEBUG: In ALL_REPOS (before query filter):" >&2
+echo "$ALL_REPOS" | grep -i "apache/datafusion" >&2
+
 FILTERED_REPOS=$(echo "$ALL_REPOS" | grep -i "$QUERY")
+
+# DEBUG: Check final filtered results
+echo "DEBUG: Query was: '$QUERY'" >&2
+echo "DEBUG: In FILTERED_REPOS (final):" >&2
+echo "$FILTERED_REPOS" | grep -i "apache/datafusion" >&2
 
 # Generate Alfred JSON output
 echo "{
