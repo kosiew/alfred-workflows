@@ -30,108 +30,27 @@ fetch_github_data() {
   echo "$data"
 }
 
-# Function to check if user has access to specific repositories
-check_specific_repos() {
-  local repos=("apache/datafusion" "apache/datafusion-python")
-  local accessible_repos=""
-  
-  for repo in "${repos[@]}"; do
-    # Check if user has access to the repository
-    echo "DEBUG: Checking access to $repo..." >&2
-    local response=$(curl -s -w "%{http_code}" "${HEADERS[@]}" "https://api.github.com/repos/$repo" -o /tmp/repo_check.json)
-    echo "DEBUG: HTTP response code for $repo: $response" >&2
-    
-    if [[ "$response" == "200" ]]; then
-      # Parse the repository info
-      local repo_info=$(cat /tmp/repo_check.json | jq -r '"\(.full_name)|\(.description)|\(.fork)"')
-      echo "DEBUG: Successfully got info for $repo: $repo_info" >&2
-      accessible_repos="$accessible_repos"$'\n'"$repo_info"
-      
-      # Also check permissions
-      local permissions=$(cat /tmp/repo_check.json | jq -r '.permissions // empty | "\(.admin)|\(.maintain)|\(.push)|\(.triage)|\(.pull)"')
-      echo "DEBUG: Permissions for $repo: admin|maintain|push|triage|pull = $permissions" >&2
-    else
-      echo "DEBUG: Failed to access $repo (HTTP $response)" >&2
-      if [[ -f /tmp/repo_check.json ]]; then
-        echo "DEBUG: Error response:" >&2
-        cat /tmp/repo_check.json >&2
-      fi
-    fi
-  done
-  
-  echo "$accessible_repos"
-}
-
 # Fetch repositories from multiple sources
 # 1. All user repositories (owned, collaborator, organization_member)
 USER_REPOS=$(fetch_github_data "https://api.github.com/user/repos?affiliation=owner,collaborator,organization_member")
-if echo "$USER_REPOS" | grep -q -i "apache/datafusion"; then
-  echo "DEBUG: Found Apache DataFusion repos in USER_REPOS!" >&2
-  echo "$USER_REPOS" | grep -i "apache/datafusion" >&2
-fi
 
 # 2. Starred repositories (in case some aren't included above)
 STARRED_REPOS=$(fetch_github_data "https://api.github.com/user/starred")
-if echo "$STARRED_REPOS" | grep -q -i "apache/datafusion"; then
-  echo "DEBUG: Found Apache DataFusion repos in STARRED_REPOS!" >&2
-  echo "$STARRED_REPOS" | grep -i "apache/datafusion" >&2
-fi
 
-# 3. Try different affiliation parameters to see what we get
-COLLAB_ONLY_REPOS=$(fetch_github_data "https://api.github.com/user/repos?affiliation=collaborator")
-if echo "$COLLAB_ONLY_REPOS" | grep -q -i "apache/datafusion"; then
-  echo "DEBUG: Found Apache DataFusion repos in COLLAB_ONLY_REPOS!" >&2
-  echo "$COLLAB_ONLY_REPOS" | grep -i "apache/datafusion" >&2
-fi
-
-# 4. Try with no affiliation (default)
-DEFAULT_USER_REPOS=$(fetch_github_data "https://api.github.com/user/repos")
-if echo "$DEFAULT_USER_REPOS" | grep -q -i "apache/datafusion"; then
-  echo "DEBUG: Found Apache DataFusion repos in DEFAULT_USER_REPOS!" >&2
-  echo "$DEFAULT_USER_REPOS" | grep -i "apache/datafusion" >&2
-fi
-
-# 5. Organization repositories (backup approach)
+# 3. Organization repositories (backup approach)
 ORG_REPOS=""
 ORGS=$(curl -s "${HEADERS[@]}" "https://api.github.com/users/$GITHUB_USERNAME/orgs" | jq -r '.[].login')
 for ORG in $ORGS; do
   ORG_REPOS+=$(fetch_github_data "https://api.github.com/orgs/$ORG/repos")$'\n'
 done
-if echo "$ORG_REPOS" | grep -q -i "apache/datafusion"; then
-  echo "DEBUG: Found Apache DataFusion repos in ORG_REPOS!" >&2
-  echo "$ORG_REPOS" | grep -i "apache/datafusion" >&2
-fi
 
-# 6. Check if Apache is in the orgs (it probably won't be)
-APACHE_ORG_CHECK=$(curl -s -w "%{http_code}" "${HEADERS[@]}" "https://api.github.com/orgs/apache" -o /tmp/apache_org.json)
-if [[ "$APACHE_ORG_CHECK" == "200" ]]; then
-  echo "DEBUG: User has access to Apache org!" >&2
-fi
-
-# 4. Check specific repositories that might be missing
-SPECIFIC_REPOS=$(check_specific_repos)
-
-# 5. Hardcode specific repositories that should always be included
+# Hardcode specific repositories that should always be included
+# Note: These repos require a token with ≤366 days lifetime due to ASF enterprise policy
 HARDCODED_REPOS="apache/datafusion|Apache DataFusion is a very fast, extensible query engine for building high-quality data-centric systems in Rust, using the Apache Arrow in-memory format.|false
 apache/datafusion-python|Python bindings for Apache DataFusion|false"
 
-# Only show debug if we find the repos in any source (excluding hardcoded)
-if echo -e "$USER_REPOS\n$STARRED_REPOS\n$ORG_REPOS\n$SPECIFIC_REPOS" | grep -q -i "apache/datafusion"; then
-  echo "DEBUG: Apache DataFusion repos found in API sources!" >&2
-  echo "In USER_REPOS:" >&2
-  echo "$USER_REPOS" | grep -i "apache/datafusion" >&2 || echo "  (none)" >&2
-  echo "In STARRED_REPOS:" >&2
-  echo "$STARRED_REPOS" | grep -i "apache/datafusion" >&2 || echo "  (none)" >&2
-  echo "In ORG_REPOS:" >&2
-  echo "$ORG_REPOS" | grep -i "apache/datafusion" >&2 || echo "  (none)" >&2
-  echo "In SPECIFIC_REPOS:" >&2
-  echo "$SPECIFIC_REPOS" | grep -i "apache/datafusion" >&2 || echo "  (none)" >&2
-else
-  echo "DEBUG: Apache DataFusion repos NOT found in any API sources, only in hardcoded" >&2
-fi
-
 # Combine all repositories and remove duplicates by repo name (first field)
-ALL_REPOS_RAW=$(echo -e "$USER_REPOS\n$STARRED_REPOS\n$ORG_REPOS\n$SPECIFIC_REPOS\n$HARDCODED_REPOS")
+ALL_REPOS_RAW=$(echo -e "$USER_REPOS\n$STARRED_REPOS\n$ORG_REPOS\n$HARDCODED_REPOS")
 
 # Remove duplicates by repository name (keeping the first occurrence)
 # This handles cases where a repo appears in multiple sources (user, starred, org)
@@ -160,11 +79,6 @@ while IFS= read -r REPO_INFO; do
     REPO_NAME=$(echo "$REPO_INFO" | cut -d'|' -f1)
     REPO_DESCRIPTION=$(echo "$REPO_INFO" | cut -d'|' -f2)
     IS_FORK=$(echo "$REPO_INFO" | cut -d'|' -f3)
-    
-    # Only debug Apache DataFusion repos
-    if echo "$REPO_NAME" | grep -q -i "apache/datafusion"; then
-      echo "DEBUG: Processing Apache repo: $REPO_NAME" >&2
-    fi
     
     REPO_DESCRIPTION=${REPO_DESCRIPTION:-"No description provided"}
     TITLE_WITH_DESC="$REPO_NAME - $REPO_DESCRIPTION"
