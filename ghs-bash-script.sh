@@ -30,6 +30,24 @@ fetch_github_data() {
   echo "$data"
 }
 
+# Function to check if user has access to specific repositories
+check_specific_repos() {
+  local repos=("apache/datafusion" "apache/datafusion-python")
+  local accessible_repos=""
+  
+  for repo in "${repos[@]}"; do
+    # Check if user has access to the repository
+    local response=$(curl -s -w "%{http_code}" "${HEADERS[@]}" "https://api.github.com/repos/$repo" -o /tmp/repo_check.json)
+    if [[ "$response" == "200" ]]; then
+      # Parse the repository info
+      local repo_info=$(cat /tmp/repo_check.json | jq -r '"\(.full_name)|\(.description)|\(.fork)"')
+      accessible_repos="$accessible_repos"$'\n'"$repo_info"
+    fi
+  done
+  
+  echo "$accessible_repos"
+}
+
 # Fetch repositories from multiple sources
 # 1. All user repositories (owned, collaborator, organization_member)
 USER_REPOS=$(fetch_github_data "https://api.github.com/user/repos?affiliation=owner,collaborator,organization_member")
@@ -44,8 +62,17 @@ for ORG in $ORGS; do
   ORG_REPOS+=$(fetch_github_data "https://api.github.com/orgs/$ORG/repos")$'\n'
 done
 
+# 4. Check specific repositories that might be missing
+SPECIFIC_REPOS=$(check_specific_repos)
+
+# DEBUG: Output raw data to stderr to see what we're getting
+echo "DEBUG USER_REPOS count:" $(echo "$USER_REPOS" | wc -l) >&2
+echo "DEBUG STARRED_REPOS count:" $(echo "$STARRED_REPOS" | wc -l) >&2
+echo "DEBUG SPECIFIC_REPOS:" >&2
+echo "$SPECIFIC_REPOS" >&2
+
 # Combine all repositories and remove duplicates by repo name (first field)
-ALL_REPOS_RAW=$(echo -e "$USER_REPOS\n$STARRED_REPOS\n$ORG_REPOS")
+ALL_REPOS_RAW=$(echo -e "$USER_REPOS\n$STARRED_REPOS\n$ORG_REPOS\n$SPECIFIC_REPOS")
 
 # Remove duplicates by repository name (keeping the first occurrence)
 # This handles cases where a repo appears in multiple sources (user, starred, org)
