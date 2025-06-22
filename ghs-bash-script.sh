@@ -31,16 +31,13 @@ fetch_github_data() {
 }
 
 # Fetch repositories from multiple sources
-# 1. User's own repositories
-USER_REPOS=$(fetch_github_data "https://api.github.com/user/repos")
+# 1. All user repositories (owned, collaborator, organization_member)
+USER_REPOS=$(fetch_github_data "https://api.github.com/user/repos?affiliation=owner,collaborator,organization_member")
 
-# 2. Starred repositories
+# 2. Starred repositories (in case some aren't included above)
 STARRED_REPOS=$(fetch_github_data "https://api.github.com/user/starred")
 
-# 3. Repositories where user is a collaborator (this might include the missing repo)
-COLLAB_REPOS=$(fetch_github_data "https://api.github.com/user/repos?affiliation=collaborator")
-
-# 4. Organization repositories
+# 3. Organization repositories (backup approach)
 ORG_REPOS=""
 ORGS=$(curl -s "${HEADERS[@]}" "https://api.github.com/users/$GITHUB_USERNAME/orgs" | jq -r '.[].login')
 for ORG in $ORGS; do
@@ -48,7 +45,7 @@ for ORG in $ORGS; do
 done
 
 # Combine all repositories and remove duplicates by repo name (first field)
-ALL_REPOS_RAW=$(echo -e "$USER_REPOS\n$STARRED_REPOS\n$COLLAB_REPOS\n$ORG_REPOS")
+ALL_REPOS_RAW=$(echo -e "$USER_REPOS\n$STARRED_REPOS\n$ORG_REPOS")
 
 # Remove duplicates by repository name (keeping the first occurrence)
 # This handles cases where a repo appears in multiple sources (user, starred, org)
