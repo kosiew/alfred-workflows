@@ -65,14 +65,20 @@ done
 # 4. Check specific repositories that might be missing
 SPECIFIC_REPOS=$(check_specific_repos)
 
+# 5. Hardcode specific repositories that should always be included
+HARDCODED_REPOS="apache/datafusion|Apache DataFusion is a very fast, extensible query engine for building high-quality data-centric systems in Rust, using the Apache Arrow in-memory format.|false
+apache/datafusion-python|Python bindings for Apache DataFusion|false"
+
 # DEBUG: Output raw data to stderr to see what we're getting
 echo "DEBUG USER_REPOS count:" $(echo "$USER_REPOS" | wc -l) >&2
 echo "DEBUG STARRED_REPOS count:" $(echo "$STARRED_REPOS" | wc -l) >&2
 echo "DEBUG SPECIFIC_REPOS:" >&2
 echo "$SPECIFIC_REPOS" >&2
+echo "DEBUG HARDCODED_REPOS:" >&2
+echo "$HARDCODED_REPOS" >&2
 
 # Combine all repositories and remove duplicates by repo name (first field)
-ALL_REPOS_RAW=$(echo -e "$USER_REPOS\n$STARRED_REPOS\n$ORG_REPOS\n$SPECIFIC_REPOS")
+ALL_REPOS_RAW=$(echo -e "$USER_REPOS\n$STARRED_REPOS\n$ORG_REPOS\n$SPECIFIC_REPOS\n$HARDCODED_REPOS")
 
 # Remove duplicates by repository name (keeping the first occurrence)
 # This handles cases where a repo appears in multiple sources (user, starred, org)
