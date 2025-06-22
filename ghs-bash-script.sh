@@ -39,9 +39,16 @@ for ORG in $ORGS; do
   ORG_REPOS+=$(fetch_github_data "https://api.github.com/orgs/$ORG/repos")$'\n'
 done
 
+# Combine all repositories and remove duplicates by repo name (first field)
+ALL_REPOS_RAW=$(echo -e "$USER_REPOS\n$STARRED_REPOS\n$ORG_REPOS")
+
+# Remove duplicates by repository name (keeping the first occurrence)
+# This handles cases where a repo appears in multiple sources (user, starred, org)
+ALL_REPOS_UNIQUE=$(echo "$ALL_REPOS_RAW" | awk -F'|' '!seen[$1]++' | grep -v '^$')
+
 # Separate forked and non-forked repositories
-NON_FORKED_REPOS=$(echo -e "$USER_REPOS\n$STARRED_REPOS\n$ORG_REPOS" | grep -v '|true$' | sort -u)
-FORKED_REPOS=$(echo -e "$USER_REPOS\n$STARRED_REPOS\n$ORG_REPOS" | grep '|true$' | sort -u)
+NON_FORKED_REPOS=$(echo "$ALL_REPOS_UNIQUE" | grep -v '|true$')
+FORKED_REPOS=$(echo "$ALL_REPOS_UNIQUE" | grep '|true$')
 
 # Combine and filter repositories with non-forked first
 ALL_REPOS=$(echo -e "$NON_FORKED_REPOS\n$FORKED_REPOS")
