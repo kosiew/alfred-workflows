@@ -187,13 +187,15 @@ def generate_python_import_statements(simple_imports, from_imports):
     # From imports
     for module, items in sorted(from_imports.items()):
         sorted_items = sorted(items)
-        # If many items, use multi-line format
-        if len(", ".join(sorted_items)) > 79:
+        # If multiple items, use multi-line format with parentheses
+        if len(sorted_items) > 1:
             result.append(f"from {module} import (")
-            for item in sorted_items:
-                result.append(f"    {item},")
+            for item in sorted_items[:-1]:
+                result.append(f"    {item}, ")
+            result.append(f"    {sorted_items[-1]}")
             result.append(")")
         else:
+            # Single item imports stay on one line
             items_str = ", ".join(sorted_items)
             result.append(f"from {module} import {items_str}")
 
