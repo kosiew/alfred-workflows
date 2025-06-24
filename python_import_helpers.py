@@ -195,9 +195,8 @@ def generate_python_import_statements(simple_imports, from_imports):
             result.append(f"    {sorted_items[-1]}")
             result.append(")")
         else:
-            # Single item imports stay on one line
-            items_str = ", ".join(sorted_items)
-            result.append(f"from {module} import {items_str}")
+            # Single item imports stay on one line without parentheses
+            result.append(f"from {module} import {sorted_items[0]}")
 
     return result
 
