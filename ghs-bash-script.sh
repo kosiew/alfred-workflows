@@ -132,7 +132,7 @@ while IFS= read -r REPO_INFO; do
       {
         \"title\": \"$REPO_NAME PR number\",
         \"subtitle\": \"View Pull Request number\",
-        \"arg\": \"https://github.com/$REPO_NAME/pulls/var:num\",
+        \"arg\": \"https://github.com/$REPO_NAME/pull/var:num\",
         \"mods\": {\"cmd\": {\"subtitle\": \"⌘: Copy Pull Requests URL to clipboard\", \"arg\": \"https://github.com/$REPO_NAME/pulls/var:num\"}}
       },
       {
