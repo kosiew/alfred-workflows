@@ -329,6 +329,25 @@ def streamline_python_imports(text):
     return "\n".join(result)
 
 
+def remove_plus_prefix(text):
+    """Removes '+' prefix from lines in the input text."""
+    if not text or text.isspace():
+        return text
+
+    lines = text.strip().split("\n")
+    filtered_lines = []
+
+    for line in lines:
+        if line.startswith("+"):
+            # Remove the '+' and any immediately following whitespace
+            cleaned_line = line[1:].lstrip()
+            filtered_lines.append(cleaned_line)
+        else:
+            filtered_lines.append(line)
+
+    return "\n".join(filtered_lines)
+
+
 def do():
     """Main function to handle Alfred workflow input and output."""
     action = sys.argv[1]
@@ -502,6 +521,24 @@ def do():
                 VARIABLES: {
                     MESSAGE: f"Replaced '{search_string}' with '{replace_with}'",
                     MESSAGE_TITLE: "String Substitution",
+                },
+            }
+        }
+
+    elif action == "remove_plus_prefix":
+        # Get input text from Alfred environment variable
+        input_text = os.getenv("entry", "").strip()
+
+        # Remove plus prefix from lines
+        filtered_text = remove_plus_prefix(input_text)
+
+        # Prepare JSON output for Alfred
+        output = {
+            ALFREDWORKFLOW: {
+                ARG: filtered_text,
+                VARIABLES: {
+                    MESSAGE: "Plus prefixes removed!",
+                    MESSAGE_TITLE: "Success",
                 },
             }
         }
