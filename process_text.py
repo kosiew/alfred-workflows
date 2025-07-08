@@ -330,7 +330,7 @@ def streamline_python_imports(text):
 
 
 def remove_plus_prefix(text):
-    """Removes '+' prefix from lines in the input text."""
+    """Removes '+' and '-' prefix from lines in the input text."""
     if not text or text.isspace():
         return text
 
@@ -338,8 +338,8 @@ def remove_plus_prefix(text):
     filtered_lines = []
 
     for line in lines:
-        if line.startswith("+"):
-            # Remove the '+' and any immediately following whitespace
+        if line.startswith("+") or line.startswith("-"):
+            # Remove the '+' or '-' and any immediately following whitespace
             cleaned_line = line[1:].lstrip()
             filtered_lines.append(cleaned_line)
         else:
@@ -537,7 +537,7 @@ def do():
             ALFREDWORKFLOW: {
                 ARG: filtered_text,
                 VARIABLES: {
-                    MESSAGE: "Plus prefixes removed!",
+                    MESSAGE: "Plus/minus prefixes removed!",
                     MESSAGE_TITLE: "Success",
                 },
             }
