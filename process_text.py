@@ -1,3 +1,4 @@
+
 import sys
 import re
 import json
@@ -60,6 +61,44 @@ def process_text(text):
 
     return first_2_lines, transformed_text
 
+def show_diffed_result(input_text):
+    """
+    Given a diff-like text, remove lines starting with '-',
+    keep lines starting with '+', renumber them, and output the cleaned result.
+    """
+    if not input_text or input_text.isspace():
+        return input_text
+
+    lines = input_text.strip().split("\n")
+    output_lines = []
+    line_number = 1
+    for line in lines:
+        # Remove lines starting with '-'
+        if line.lstrip().startswith('-'):
+            continue
+        # For lines starting with '+', remove the '+', renumber, and keep
+        elif line.lstrip().startswith('+'):
+            rest = line.lstrip()[1:].lstrip()
+            idx = rest.find(")")
+            if idx != -1:
+                new_line = f"{line_number:02d})" + rest[idx+1:]
+                output_lines.append(new_line)
+                line_number += 1
+            else:
+                output_lines.append(rest)
+                line_number += 1
+        # For normal lines, keep as is and renumber
+        else:
+            lstripped = line.lstrip()
+            idx = lstripped.find(")")
+            if idx != -1 and lstripped[:idx].isdigit():
+                new_line = f"{line_number:02d})" + lstripped[idx+1:]
+                output_lines.append(new_line)
+                line_number += 1
+            else:
+                output_lines.append(line)
+                line_number += 1
+    return "\n".join(output_lines)
 
 def rename_dalle_files():
     try:
@@ -538,6 +577,24 @@ def do():
                 ARG: filtered_text,
                 VARIABLES: {
                     MESSAGE: "Plus/minus prefixes removed!",
+                    MESSAGE_TITLE: "Success",
+                },
+            }
+        }
+
+    elif action == "show_diffed_result":
+        # Get input text from Alfred environment variable
+        input_text = os.getenv("entry", "").strip()
+
+        # Process the diffed result
+        filtered_text = show_diffed_result(input_text)
+
+        # Prepare JSON output for Alfred
+        output = {
+            ALFREDWORKFLOW: {
+                ARG: filtered_text,
+                VARIABLES: {
+                    MESSAGE: "Diffed result shown!",
                     MESSAGE_TITLE: "Success",
                 },
             }
