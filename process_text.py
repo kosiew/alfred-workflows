@@ -73,13 +73,17 @@ def show_diffed_result(input_text):
     output_lines = []
     for line in lines:
         # Remove lines starting with '-'
-        if line.lstrip().startswith('-'):
+        stripped = line.lstrip()
+        if stripped.startswith('-'):
             continue
-        # For lines starting with '+', remove the '+', keep the rest (preserve original numbering)
-        elif line.lstrip().startswith('+'):
-            # Remove the first '+' and any following whitespace, but keep indentation and numbering
+        elif stripped.startswith('+'):
+            # Find the index of '+' in the original line (to preserve indentation)
             plus_index = line.find('+')
-            new_line = line[:plus_index] + line[plus_index+1:].lstrip()
+            # Remove the '+' and a single following space if present, but preserve all other whitespace
+            after_plus = line[plus_index+1:]
+            if after_plus.startswith(' '):
+                after_plus = after_plus[1:]
+            new_line = line[:plus_index] + after_plus
             output_lines.append(new_line)
         else:
             output_lines.append(line)
