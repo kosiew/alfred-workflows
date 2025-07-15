@@ -69,31 +69,16 @@ def show_diffed_result(input_text):
     lines starting with '+' with a single space (at the same
     position), and keep everything else exactly as in the input.
     """
-    output = []
+    output = ["\n"]
     for line in input_text.splitlines():
-        # find the index of the first non-space character
-        m = re.search(r'\S', line)
-        if not m:
-            # blank or all spaces: keep as-is
-            output.append(line)
+        if line.startswith("-"):
             continue
+        if line.startswith("+"):
+            line = line.replace("+", " ", 1)  # Replace only the first occurrence
+        output.append(line)    
 
-        idx = m.start()
-        ch = line[idx]
-
-        # drop '-' lines
-        if ch == '-':
-            continue
-
-        # replace '+' with ' '
-        if ch == '+':
-            # keep everything up to idx, then a space, then rest after '+'
-            output.append(line[:idx] + ' ' + line[idx+1:])
-        else:
-            # leave context lines untouched
-            output.append(line)
-
-    return "\n".join(output)
+    result = "\n".join(output)
+    return result
 
 
 
