@@ -71,33 +71,18 @@ def show_diffed_result(input_text):
 
     lines = input_text.strip().split("\n")
     output_lines = []
-    line_number = 1
     for line in lines:
         # Remove lines starting with '-'
         if line.lstrip().startswith('-'):
             continue
-        # For lines starting with '+', remove the '+', renumber, and keep
+        # For lines starting with '+', remove the '+', keep the rest (preserve original numbering)
         elif line.lstrip().startswith('+'):
-            rest = line.lstrip()[1:].lstrip()
-            idx = rest.find(")")
-            if idx != -1:
-                new_line = f"{line_number:02d})" + rest[idx+1:]
-                output_lines.append(new_line)
-                line_number += 1
-            else:
-                output_lines.append(rest)
-                line_number += 1
-        # For normal lines, keep as is and renumber
+            # Remove the first '+' and any following whitespace, but keep indentation and numbering
+            plus_index = line.find('+')
+            new_line = line[:plus_index] + line[plus_index+1:].lstrip()
+            output_lines.append(new_line)
         else:
-            lstripped = line.lstrip()
-            idx = lstripped.find(")")
-            if idx != -1 and lstripped[:idx].isdigit():
-                new_line = f"{line_number:02d})" + lstripped[idx+1:]
-                output_lines.append(new_line)
-                line_number += 1
-            else:
-                output_lines.append(line)
-                line_number += 1
+            output_lines.append(line)
     return "\n".join(output_lines)
 
 def rename_dalle_files():
