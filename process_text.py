@@ -69,16 +69,16 @@ def show_diffed_result(input_text):
     lines starting with '+' with a single space (at the same
     position), and keep everything else exactly as in the input.
     """
-    output = ["\n"]
-    for line in input_text.splitlines():
+    output = []
+    
+    for line in input_text.split("\n"):
         if line.startswith("-"):
             continue
         if line.startswith("+"):
             line = line.replace("+", " ", 1)  # Replace only the first occurrence
         output.append(line)    
 
-    result = "\n".join(output)
-    return result
+    return "\n".join(output)
 
 
 
@@ -567,15 +567,15 @@ def do():
 
     elif action == "show_diffed_result":
         # Get input text from Alfred environment variable
-        input_text = os.getenv("entry", "").strip()
+        input_text = os.getenv("entry", "").rstrip()
 
         # Process the diffed result
-        filtered_text = show_diffed_result(input_text)
+        processed_text = show_diffed_result(input_text)
 
         # Prepare JSON output for Alfred
         output = {
             ALFREDWORKFLOW: {
-                ARG: filtered_text,
+                ARG: processed_text,
                 VARIABLES: {
                     MESSAGE: "Diffed result shown!",
                     MESSAGE_TITLE: "Success",
