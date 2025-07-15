@@ -61,55 +61,41 @@ def process_text(text):
 
     return first_2_lines, transformed_text
 
-import re
+
 
 def show_diffed_result(input_text):
     """
-    Given a diff-like text, remove lines starting with '-',
-    keep lines starting with '+', then renumber all lines
-    sequentially (preserving the first line’s original number)
-    and indent them with exactly two spaces, using a dynamic
-    width based on the highest new number.
+    Drop all lines starting with '-', replace the '+' in
+    lines starting with '+' with a single space (at the same
+    position), and keep everything else exactly as in the input.
     """
-    if not input_text or input_text.isspace():
-        return input_text
-
-    # 1) Collect clean lines (drop '-' lines, strip '+' markers)
-    raw = []
-    for line in input_text.strip().splitlines():
-        stripped = line.lstrip()
-        if stripped.startswith('-'):
+    output = []
+    for line in input_text.splitlines():
+        # find the index of the first non-space character
+        m = re.search(r'\S', line)
+        if not m:
+            # blank or all spaces: keep as-is
+            output.append(line)
             continue
-        if stripped.startswith('+'):
-            no_marker = stripped[1:].lstrip(' ')
-            raw.append(no_marker)
+
+        idx = m.start()
+        ch = line[idx]
+
+        # drop '-' lines
+        if ch == '-':
+            continue
+
+        # replace '+' with ' '
+        if ch == '+':
+            # keep everything up to idx, then a space, then rest after '+'
+            output.append(line[:idx] + ' ' + line[idx+1:])
         else:
-            raw.append(line)
+            # leave context lines untouched
+            output.append(line)
 
-    if not raw:
-        return ""
+    return "\n".join(output)
 
-    # 2) Extract starting number from the first retained line
-    m0 = re.match(r"\s*(\d+)\)", raw[0])
-    base = int(m0.group(1)) if m0 else 1
 
-    # 3) Compute dynamic width: maximum number of digits needed
-    total = len(raw)
-    max_num = base + total - 1
-    width = len(str(max_num))
-
-    # 4) Renumber and re-indent
-    out = []
-    for idx, line in enumerate(raw):
-        # grab everything after the first ')'
-        m = re.match(r"\s*\d+\)(.*)", line)
-        rest = m.group(1) if m else line
-        new_num = base + idx
-        # right-align within the computed width
-        num_str = str(new_num).rjust(width)
-        out.append(f"  {num_str}){rest}")
-
-    return "\n".join(out)
 
 
 def rename_dalle_files():
