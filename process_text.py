@@ -1,4 +1,3 @@
-
 import sys
 import re
 import json
@@ -61,40 +60,71 @@ def process_text(text):
 
     return first_2_lines, transformed_text
 
+def check_diff_version(input_text):
+    """
+    Returns 1 if any line starts with '+' or '-', else returns 2.
+    """
+    for line in input_text.split("\n"):
+        if line.startswith("+") or line.startswith("-"):
+            return 1
+    return 2
+
 
 def show_diffed_result(input_text):
     """
+    Processes the input text to show a diffed result.
     - For snapshot diff lines (those containing '│' or '|'), drop everything before and including that symbol.
     - Then:
       * Drop lines starting with '-'
       * Replace a leading '+' with a single space (preserving indentation)
       * Keep all other lines exactly as is
     """
+    return _show_diffed_result(input_text, reverse=False)
+
+def show_reverse_diffed_result(input_text):
+    """
+    Processes the input text to show a reverse diffed result.
+    - For snapshot diff lines (those containing '│' or '|'), drop everything before and including that symbol.
+    - Then:
+      * Drop lines starting with '+'
+      * Replace a leading '-' with a single space (preserving indentation)
+      * Keep all other lines exactly as is
+    """
+    return _show_diffed_result(input_text, reverse=True)
+
+def _show_diffed_result(input_text, reverse=False):
+    """
+    - For snapshot diff (version 2) lines (those containing '│' or '|'), drop everything before and including that symbol.
+    - Then:
+      * Drop lines starting with '-'
+      * Replace a leading '+' with a single space (preserving indentation)
+      * Keep all other lines exactly as is
+    """
+    version = check_diff_version(input_text)
     output = []
     for line in input_text.split("\n"):
-        # If it's a "version 2" line, remove the prefix up to the first '│' or '|'
-        if '│' in line or '|' in line:
+        # Only for version 2, remove the prefix up to the first '│' or '|'
+        if version == 2 and ('│' in line or '|' in line):
             # split on either box-drawing or ascii pipe, max once
             parts = re.split(r"[│|]", line, maxsplit=1)
             if len(parts) >= 2:
                 line = parts[1]
 
         # Now treat it like version 1
-        if line.startswith("-"):
-            # drop deleted lines
-            continue
-        if line.startswith("+"):
-            # turn the '+' into a space
-            line = line.replace("+", " ", 1)
+        if reverse:
+            if line.startswith("+"):
+                continue
+            if line.startswith("-"):
+                line = " " + line[1:]
+        else:
+            if line.startswith("-"):
+                continue
+            if line.startswith("+"):
+                line = " " + line[1:]
 
         output.append(line)
 
     return "\n".join(output)
-
-
-
-
-
 
 def rename_dalle_files():
     try:
@@ -584,6 +614,23 @@ def do():
 
         # Process the diffed result
         processed_text = show_diffed_result(input_text)
+
+        # Prepare JSON output for Alfred
+        output = {
+            ALFREDWORKFLOW: {
+                ARG: processed_text,
+                VARIABLES: {
+                    MESSAGE: "Diffed result shown!",
+                    MESSAGE_TITLE: "Success",
+                },
+            }
+        }
+    elif action == "show_reverse_diffed_result":
+        # Get input text from Alfred environment variable
+        input_text = os.getenv("entry", "").rstrip()
+
+        # Process the diffed result
+        processed_text = show_reverse_diffed_result(input_text)
 
         # Prepare JSON output for Alfred
         output = {
