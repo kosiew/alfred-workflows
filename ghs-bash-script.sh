@@ -47,7 +47,9 @@ done
 # Note: These repos require a token with ≤366 days lifetime due to ASF enterprise policy
 HARDCODED_REPOS="apache/datafusion|Apache DataFusion is a very fast, extensible query engine for building high-quality data-centric systems in Rust, using the Apache Arrow in-memory format.|false
 apache/datafusion-python|Python bindings for Apache DataFusion|false
-apache/datafusion-ballista|Apache DataFusion Ballista Distributed Query Engine|false"
+apache/datafusion-ballista|Apache DataFusion Ballista Distributed Query Engine|false
+apache/arrow-rs|Apache Arrow Rust implementation|false
+"
 
 # Combine all repositories and remove duplicates by repo name (first field)
 ALL_REPOS_RAW=$(echo -e "$USER_REPOS\n$STARRED_REPOS\n$ORG_REPOS\n$HARDCODED_REPOS")
