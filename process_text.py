@@ -62,23 +62,36 @@ def process_text(text):
     return first_2_lines, transformed_text
 
 
-
 def show_diffed_result(input_text):
     """
-    Drop all lines starting with '-', replace the '+' in
-    lines starting with '+' with a single space (at the same
-    position), and keep everything else exactly as in the input.
+    - For snapshot diff lines (those containing '│' or '|'), drop everything before and including that symbol.
+    - Then:
+      * Drop lines starting with '-'
+      * Replace a leading '+' with a single space (preserving indentation)
+      * Keep all other lines exactly as is
     """
     output = []
-    
     for line in input_text.split("\n"):
+        # If it's a "version 2" line, remove the prefix up to the first '│' or '|'
+        if '│' in line or '|' in line:
+            # split on either box-drawing or ascii pipe, max once
+            parts = re.split(r"[│|]", line, maxsplit=1)
+            if len(parts) >= 2:
+                line = parts[1]
+
+        # Now treat it like version 1
         if line.startswith("-"):
+            # drop deleted lines
             continue
         if line.startswith("+"):
-            line = line.replace("+", " ", 1)  # Replace only the first occurrence
-        output.append(line)    
+            # turn the '+' into a space
+            line = line.replace("+", " ", 1)
+
+        output.append(line)
 
     return "\n".join(output)
+
+
 
 
 
