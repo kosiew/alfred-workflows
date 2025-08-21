@@ -270,10 +270,6 @@ def streamline_rust_imports_high(text):
         return "\n".join(other_lines + [""] + result)
     return "\n".join(other_lines + result)
 
-    if other_lines and result:
-        return "\n".join(other_lines + [""] + result)
-    return "\n".join(other_lines + result)
-
 
 def streamline_rust_imports_low(text):
     """Streamline Rust imports grouping at the lowest (most-specific) module level.
