@@ -93,31 +93,61 @@ def parse_nested_import_items(items_str):
     Returns:
         set: Set of parsed import items
     """
-    # Process nested curly braces to maintain proper structure
-    items = set()
-    current_item = ""
+    # Deprecated wrapper retained for backward compatibility.
+    # Use the new brace-aware parser which preserves order and provides a 'self' flag.
+    items_list, has_self = _parse_brace_aware_items(items_str)
+    items_set = set(items_list)
+    if has_self:
+        items_set.add('self')
+    return items_set
+
+
+def _parse_brace_aware_items(items_str):
+    """Parse a brace-aware items string into ordered items and a has_self flag.
+
+    Returns (items_list, has_self) where items_list preserves top-level order and
+    items may include nested-brace expressions. This handles nested braces and
+    only splits on commas at brace level 0.
+    """
+    items = []
+    current = ""
     brace_level = 0
-    
+    has_self = False
+
     for char in items_str:
         if char == '{':
             brace_level += 1
-            current_item += char
+            current += char
         elif char == '}':
             brace_level -= 1
-            current_item += char
+            current += char
         elif char == ',' and brace_level == 0:
-            # Only split at top-level commas
-            if current_item.strip():
-                items.add(current_item.strip())
-            current_item = ""
+            item = current.strip()
+            if item:
+                if item == 'self':
+                    has_self = True
+                else:
+                    items.append(item)
+            current = ""
         else:
-            current_item += char
-    
-    # Add the last item if there is one
-    if current_item.strip():
-        items.add(current_item.strip())
-        
-    return items
+            current += char
+
+    # Final item
+    item = current.strip()
+    if item:
+        if item == 'self':
+            has_self = True
+        else:
+            items.append(item)
+
+    return items, has_self
+
+
+def _sort_lower_then_upper(items):
+    """Return items sorted with lowercase-starting identifiers first, then others."""
+    lower_items = sorted([it for it in items if it and it[0].islower()])
+    upper_items = sorted([it for it in items if not (it and it[0].islower())])
+    return lower_items + upper_items
 
 
 def process_import_with_braces(import_path):
@@ -267,38 +297,8 @@ def process_nested_module_items(nested_content):
             - items_list: List of parsed items
             - has_self: Boolean indicating if 'self' is among the items
     """
-    nested_items = []
-    current = ""
-    brace_level = 0
-    has_self = False
-    
-    for char in nested_content:
-        if char == '{':
-            brace_level += 1
-            current += char
-        elif char == '}':
-            brace_level -= 1
-            current += char
-        elif char == ',' and brace_level == 0:
-            item = current.strip()
-            if item:
-                if item == 'self':
-                    has_self = True
-                else:
-                    nested_items.append(item)
-            current = ""
-        else:
-            current += char
-    
-    # Process final item
-    item = current.strip()
-    if item:
-        if item == 'self':
-            has_self = True
-        else:
-            nested_items.append(item)
-    
-    return nested_items, has_self
+    # Reuse the brace-aware parser to get ordered nested items and self flag
+    return _parse_brace_aware_items(nested_content)
 
 
 def organize_items_by_module(items):
