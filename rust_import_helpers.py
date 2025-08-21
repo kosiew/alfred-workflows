@@ -251,36 +251,27 @@ def group_imports_by_base_path(use_statements):
             - special_imports: List of special import statements that can't be grouped
     """
     grouped_by_base = {}  # {(base_path, is_pub): {cfg_attr: set(import_items)}}
-    special_imports = []
 
-    for cfg_attr, statement, is_pub in use_statements:
-        prefix_len = 8 if is_pub else 4
-        import_path = statement[prefix_len:-1].strip()
+    # Use the centralized splitter to classify statements
+    braced_entries, simple_entries, special_imports = _split_use_statements(use_statements)
 
-        if "::" not in import_path or import_path.endswith("::*"):
-            special_imports.append((cfg_attr, statement, is_pub))
-            continue
-
-        # Extract the module and path components for better grouping
-        parts = import_path.split("::")
-        
-        # For imports with curly braces like `datafusion::{...}` we may get
-        # multiple lowest-level base paths from the mapping; handle each.
-        if "{" in import_path:
-            mapping = process_import_with_braces(import_path)
-            for base_path, items in mapping.items():
-                key = (base_path, is_pub)
-                if key not in grouped_by_base:
-                    grouped_by_base[key] = {}
-                attr_key = cfg_attr or ""
-                grouped_by_base[key].setdefault(attr_key, set()).update(items)
-        else:
-            base_path, items = process_simple_import(parts)
+    # Handle braced entries (mappings of base_path -> items)
+    for cfg_attr, is_pub, mapping in braced_entries:
+        for base_path, items in mapping.items():
             key = (base_path, is_pub)
             if key not in grouped_by_base:
                 grouped_by_base[key] = {}
             attr_key = cfg_attr or ""
             grouped_by_base[key].setdefault(attr_key, set()).update(items)
+
+    # Handle simple entries (list of path parts)
+    for cfg_attr, is_pub, parts in simple_entries:
+        base_path, items = process_simple_import(parts)
+        key = (base_path, is_pub)
+        if key not in grouped_by_base:
+            grouped_by_base[key] = {}
+        attr_key = cfg_attr or ""
+        grouped_by_base[key].setdefault(attr_key, set()).update(items)
 
     return grouped_by_base, special_imports
 
@@ -468,6 +459,36 @@ def generate_import_statements(grouped_by_base, special_imports):
     return result
 
 
+def _split_use_statements(use_statements):
+    """Split use_statements into braced mappings, simple entries, and special imports.
+
+    Returns:
+        braced_entries: list of (cfg_attr, is_pub, mapping) where mapping is base_path->set(items)
+        simple_entries: list of (cfg_attr, is_pub, parts) where parts is list of path parts
+        special_imports: list of (cfg_attr, statement, is_pub)
+    """
+    braced_entries = []
+    simple_entries = []
+    special_imports = []
+
+    for cfg_attr, statement, is_pub in use_statements:
+        prefix_len = 8 if is_pub else 4
+        import_path = statement[prefix_len:-1].strip()
+
+        if "::" not in import_path or import_path.endswith("::*"):
+            special_imports.append((cfg_attr, statement, is_pub))
+            continue
+
+        if "{" in import_path:
+            mapping = process_import_with_braces(import_path)
+            braced_entries.append((cfg_attr, is_pub, mapping))
+        else:
+            parts = [p for p in import_path.split("::") if p]
+            simple_entries.append((cfg_attr, is_pub, parts))
+
+    return braced_entries, simple_entries, special_imports
+
+
 def collect_root_groups(use_statements):
     """Collect root grouping structure and special imports from parsed use statements."""
     root_groups = {}
@@ -625,39 +646,29 @@ def collect_low_groups(use_statements):
         special_imports: list of special import tuples
     """
     grouped_by_base = {}
-    special_imports = []
 
-    for cfg_attr, statement, is_pub in use_statements:
-        prefix_len = 8 if is_pub else 4
-        import_path = statement[prefix_len:-1].strip()
+    braced_entries, simple_entries, special_imports = _split_use_statements(use_statements)
 
-        # Keep as special import if it has no '::' or is a glob
-        if "::" not in import_path or import_path.endswith("::*"):
-            special_imports.append((cfg_attr, statement, is_pub))
-            continue
-
-        # If the import contains braces, expand to base_path -> items mapping
-        if "{" in import_path:
-            mapping = process_import_with_braces(import_path)
-            for base_path, items in mapping.items():
-                key = (base_path, is_pub)
-                if key not in grouped_by_base:
-                    grouped_by_base[key] = {}
-                attr_key = cfg_attr or ""
-                grouped_by_base[key].setdefault(attr_key, set()).update(items)
-        else:
-            parts = [p for p in import_path.split("::") if p]
-            if len(parts) >= 2:
-                base_path = "::".join(parts[:-1])
-                item = parts[-1]
-            else:
-                base_path = parts[0]
-                item = parts[-1]
-
+    for cfg_attr, is_pub, mapping in braced_entries:
+        for base_path, items in mapping.items():
             key = (base_path, is_pub)
             if key not in grouped_by_base:
                 grouped_by_base[key] = {}
             attr_key = cfg_attr or ""
-            grouped_by_base[key].setdefault(attr_key, set()).add(item)
+            grouped_by_base[key].setdefault(attr_key, set()).update(items)
+
+    for cfg_attr, is_pub, parts in simple_entries:
+        if len(parts) >= 2:
+            base_path = "::".join(parts[:-1])
+            item = parts[-1]
+        else:
+            base_path = parts[0]
+            item = parts[-1]
+
+        key = (base_path, is_pub)
+        if key not in grouped_by_base:
+            grouped_by_base[key] = {}
+        attr_key = cfg_attr or ""
+        grouped_by_base[key].setdefault(attr_key, set()).add(item)
 
     return grouped_by_base, special_imports
