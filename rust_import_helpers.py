@@ -132,36 +132,22 @@ def process_import_with_braces(import_path):
             - base_path: Base module path
             - items: Set of import items
     """
-    # Get everything before the curly brace as the base path
+    # Get everything before the outermost curly brace as the full path
     full_path = import_path[:import_path.index("{")].rstrip("::")
     items_str = import_path[import_path.index("{")+1:-1]
     
     # Parse the nested items
     items = parse_nested_import_items(items_str)
         
-    # Extract the top-level module and remaining path for better grouping
-    path_parts = full_path.split("::")
-    
-    # For imports like datafusion_datasource::file::{FileSource}
-    # We want to group by the top-level module (datafusion_datasource)
-    top_level_module = path_parts[0]
-    
-    if len(path_parts) > 1:
-        # Get submodule path (like "file" or "file_scan_config")
-        submodule_path = "::".join(path_parts[1:])
-        
-        # Format each item to include its submodule
-        formatted_items = set()
-        for item in items:
-            # Don't add additional braces around the item
-            formatted_items.add(f"{submodule_path}::{item}")
-        
-        # Use the top-level module for grouping
-        base_path = top_level_module
-        return base_path, formatted_items
-    else:
-        # For simple cases like std::{io, fmt}
-        return full_path, items
+    # Split the full path into parts and use the lowest-level module
+    # (i.e., the part immediately before the `{`) as the base_path. This
+    # preserves grouping at the most specific module level, e.g.
+    # `datafusion::arrow::array::{ArrayRef}` -> base_path=`datafusion::arrow::array`
+    base_path = full_path
+
+    # Items should remain exactly as listed inside the braces. Do not prefix
+    # them with higher-level submodule paths; keep nested structure where present.
+    return base_path, items
 
 
 def process_simple_import(parts):
@@ -176,26 +162,16 @@ def process_simple_import(parts):
             - base_path: Base module path
             - items: Set of import items
     """
-    # For simple imports like `std::io::Read`
+    # For simple imports like `std::io::Read` or longer `crate::foo::bar::Baz`,
+    # choose the base_path as everything except the final item. That makes the
+    # grouping occur at the lowest module level (just before the final symbol).
     if len(parts) >= 2:
-        # Get the root module for better grouping
-        root_module = parts[0]
-        
-        if len(parts) == 2:
-            # For simple two-part paths
-            base_path = root_module
-            items = {f"{parts[1]}"}
-        else:
-            # For longer paths, group by top module and preserve submodule structure
-            base_path = root_module
-            submodule_path = "::".join(parts[1:-1])
-            item_name = parts[-1]
-            items = {f"{submodule_path}::{item_name}"}
-    else:
-        # Fallback for unusual cases
-        base_path = "::".join(parts[:-1]) if len(parts) > 1 else parts[0]
+        base_path = "::".join(parts[:-1])
         items = {parts[-1]}
-    
+    else:
+        # Fallback for single-part imports
+        base_path = parts[0]
+        items = set()
     return base_path, items
 
 
@@ -224,7 +200,7 @@ def group_imports_by_base_path(use_statements):
 
         # Extract the module and path components for better grouping
         parts = import_path.split("::")
-        
+
         # For imports with curly braces like `std::io::{Read, Write}`
         if "{" in import_path:
             base_path, items = process_import_with_braces(import_path)
@@ -382,10 +358,10 @@ def format_module_groups(module_groups):
     sorted_items = []
     
     # Format nested groups
-    for module in sorted(module_groups.keys()):
+    for module in sorted(module_groups.keys(), key=str.lower):
         # Ensure 'self' comes last in nested groups
         module_items = module_groups[module]
-        sorted_module_items = sorted([item for item in module_items if item != 'self'])
+        sorted_module_items = sorted([item for item in module_items if item != 'self'], key=str.lower)
         if 'self' in module_items:
             sorted_module_items.append('self')
         
@@ -430,8 +406,8 @@ def generate_import_statements(grouped_by_base, special_imports):
             # Organize items by module
             module_groups, simple_items = organize_items_by_module(items)
             
-            # Sort simple items (self comes last by convention)
-            sorted_simple_items = sorted([item for item in simple_items if item != 'self'])
+            # Sort simple items case-insensitively (self comes last by convention)
+            sorted_simple_items = sorted([item for item in simple_items if item != 'self'], key=str.lower)
             if 'self' in simple_items:
                 sorted_simple_items.append('self')
             
