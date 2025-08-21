@@ -132,36 +132,45 @@ def process_import_with_braces(import_path):
             - base_path: Base module path
             - items: Set of import items
     """
-    # Get everything before the curly brace as the base path
+    # full_path is the path prefix immediately before the outermost brace
     full_path = import_path[:import_path.index("{")].rstrip("::")
     items_str = import_path[import_path.index("{")+1:-1]
-    
-    # Parse the nested items
+
+    # Parse nested items into top-level pieces
     items = parse_nested_import_items(items_str)
-        
-    # Extract the top-level module and remaining path for better grouping
-    path_parts = full_path.split("::")
-    
-    # For imports like datafusion_datasource::file::{FileSource}
-    # We want to group by the top-level module (datafusion_datasource)
-    top_level_module = path_parts[0]
-    
-    if len(path_parts) > 1:
-        # Get submodule path (like "file" or "file_scan_config")
-        submodule_path = "::".join(path_parts[1:])
-        
-        # Format each item to include its submodule
-        formatted_items = set()
-        for item in items:
-            # Don't add additional braces around the item
-            formatted_items.add(f"{submodule_path}::{item}")
-        
-        # Use the top-level module for grouping
-        base_path = top_level_module
-        return base_path, formatted_items
-    else:
-        # For simple cases like std::{io, fmt}
-        return full_path, items
+
+    # We'll return a mapping: { base_path: set(items) }
+    mapping = {}
+
+    def handle_item(prefix, itm):
+        itm = itm.strip()
+        # If this item itself contains braces, recurse with new prefix
+        if "{" in itm:
+            mod_name = itm[:itm.index("{")].strip().rstrip(":")
+            nested = itm[itm.index("{") + 1 : -1]
+            new_prefix = f"{prefix}::" + mod_name if prefix else mod_name
+            for sub in parse_nested_import_items(nested):
+                handle_item(new_prefix, sub)
+        else:
+            # If the item contains a ::, split deeper base from the final name
+            if "::" in itm:
+                parts = [p.strip() for p in itm.split("::") if p.strip()]
+                if len(parts) >= 2:
+                    base = f"{prefix}::" + "::".join(parts[:-1]) if prefix else "::".join(parts[:-1])
+                    name = parts[-1]
+                else:
+                    base = prefix
+                    name = parts[-1]
+            else:
+                base = prefix
+                name = itm
+
+            mapping.setdefault(base, set()).add(name)
+
+    for it in items:
+        handle_item(full_path, it)
+
+    return mapping
 
 
 def process_simple_import(parts):
@@ -225,18 +234,23 @@ def group_imports_by_base_path(use_statements):
         # Extract the module and path components for better grouping
         parts = import_path.split("::")
         
-        # For imports with curly braces like `std::io::{Read, Write}`
+        # For imports with curly braces like `datafusion::{...}` we may get
+        # multiple lowest-level base paths from the mapping; handle each.
         if "{" in import_path:
-            base_path, items = process_import_with_braces(import_path)
+            mapping = process_import_with_braces(import_path)
+            for base_path, items in mapping.items():
+                key = (base_path, is_pub)
+                if key not in grouped_by_base:
+                    grouped_by_base[key] = {}
+                attr_key = cfg_attr or ""
+                grouped_by_base[key].setdefault(attr_key, set()).update(items)
         else:
             base_path, items = process_simple_import(parts)
-
-        key = (base_path, is_pub)
-        if key not in grouped_by_base:
-            grouped_by_base[key] = {}
-
-        attr_key = cfg_attr or ""
-        grouped_by_base[key].setdefault(attr_key, set()).update(items)
+            key = (base_path, is_pub)
+            if key not in grouped_by_base:
+                grouped_by_base[key] = {}
+            attr_key = cfg_attr or ""
+            grouped_by_base[key].setdefault(attr_key, set()).update(items)
 
     return grouped_by_base, special_imports
 
