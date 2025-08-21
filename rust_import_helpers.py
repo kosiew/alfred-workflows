@@ -466,3 +466,198 @@ def generate_import_statements(grouped_by_base, special_imports):
                 result.append(f"{prefix}{base_path}::{{{', '.join(sorted_items)}}};")
 
     return result
+
+
+def collect_root_groups(use_statements):
+    """Collect root grouping structure and special imports from parsed use statements."""
+    root_groups = {}
+    special_imports = []
+
+    for cfg_attr, statement, is_pub in use_statements:
+        prefix_len = 8 if is_pub else 4
+        import_path = statement[prefix_len:-1].strip()
+
+        if "::" not in import_path or import_path.endswith("::*"):
+            special_imports.append((cfg_attr, statement, is_pub))
+            continue
+
+        if "{" in import_path:
+            mapping = process_import_with_braces(import_path)
+            for base_path, items in mapping.items():
+                parts = [p for p in base_path.split("::") if p]
+                root = parts[0]
+                subpath = "::".join(parts[1:]) if len(parts) > 1 else ""
+
+                key = (root, is_pub)
+                if key not in root_groups:
+                    root_groups[key] = {"order": [], "submap": {}, "attrs": {}}
+
+                if subpath not in root_groups[key]["submap"]:
+                    root_groups[key]["order"].append(subpath)
+                    root_groups[key]["submap"][subpath] = set()
+
+                root_groups[key]["submap"][subpath].update(items)
+        else:
+            parts = [p for p in import_path.split("::") if p]
+            root = parts[0]
+            subpath = "::".join(parts[1:-1]) if len(parts) > 2 else parts[1] if len(parts) > 1 else ""
+            item = parts[-1]
+
+            key = (root, is_pub)
+            if key not in root_groups:
+                root_groups[key] = {"order": [], "submap": {}, "attrs": {}}
+
+            if subpath not in root_groups[key]["submap"]:
+                root_groups[key]["order"].append(subpath)
+                root_groups[key]["submap"][subpath] = set()
+
+            root_groups[key]["submap"][subpath].add(item)
+
+    return root_groups, special_imports
+
+
+def highest_common_subpath(group):
+    """Return the highest common subpath among non-empty subpaths in a group."""
+    subpaths = [s for s in group["submap"].keys() if s is not None]
+    nonempty = [s for s in subpaths if s]
+
+    if not nonempty:
+        return ""
+
+    split_lists = [s.split("::") for s in nonempty]
+    common = []
+    for parts in zip(*split_lists):
+        if all(p == parts[0] for p in parts):
+            common.append(parts[0])
+        else:
+            break
+
+    return "::".join(common) if common else ""
+
+
+def format_high_group(root, is_pub, group, common_sub):
+    """Format a single high-level group into lines.
+
+    Returns a list of lines representing the grouped `use` statement(s).
+    """
+    lines = []
+    prefix = "pub use " if is_pub else "use "
+
+    def _sorted_items(items):
+        lower_items = sorted([it for it in items if it and it[0].islower()])
+        upper_items = sorted([it for it in items if not (it and it[0].islower())])
+        return lower_items + upper_items
+
+    if common_sub:
+        # collect everything under common_sub
+        inner_map = {}
+        for sub, items in group["submap"].items():
+            if sub == "":
+                remainder = ""
+            elif sub.startswith(common_sub):
+                remainder = sub[len(common_sub) + 2 :] if len(sub) > len(common_sub) else ""
+            else:
+                remainder = sub
+
+            inner_map.setdefault(remainder, set()).update(items)
+
+        order = [s for s in group["order"] if s.startswith(common_sub) or s == ""]
+        seen = set()
+        ordered_remainders = []
+        for s in order:
+            if s == "":
+                r = ""
+            elif s.startswith(common_sub):
+                r = s[len(common_sub) + 2 :] if len(s) > len(common_sub) else ""
+            else:
+                r = s
+            if r not in seen:
+                seen.add(r)
+                ordered_remainders.append(r)
+
+        lines.append(f"{prefix}{root}::{common_sub}::{{")
+        for rem in ordered_remainders:
+            items = inner_map.get(rem, set())
+            sorted_items = _sorted_items(items)
+
+            if rem == "":
+                if len(sorted_items) == 1:
+                    lines.append(f"    {sorted_items[0]},")
+                else:
+                    lines.append(f"    {{{', '.join(sorted_items)}}},")
+            else:
+                if len(sorted_items) == 1:
+                    lines.append(f"    {rem}::{sorted_items[0]},")
+                else:
+                    lines.append(f"    {rem}::{{{', '.join(sorted_items)}}},")
+
+        lines.append("};")
+    else:
+        inner_entries = []
+        for sub in group["order"]:
+            items = group["submap"][sub]
+            sorted_items = _sorted_items(items)
+
+            if sub == "":
+                if len(sorted_items) == 1:
+                    inner_entries.append(f"{sorted_items[0]}")
+                else:
+                    inner_entries.append(f"{{{', '.join(sorted_items)}}}")
+            else:
+                if len(sorted_items) == 1:
+                    inner_entries.append(f"{sub}::{sorted_items[0]}")
+                else:
+                    inner_entries.append(f"{sub}::{{{', '.join(sorted_items)}}}")
+
+        lines.append(f"{prefix}{root}::{{")
+        for entry in inner_entries:
+            lines.append(f"    {entry},")
+        lines.append("};")
+
+    return lines
+
+
+def collect_low_groups(use_statements):
+    """Collect grouping by most-specific base path for low-level grouping.
+
+    Returns:
+        grouped_by_base: dict mapping (base_path, is_pub) -> {attr_key: set(items)}
+        special_imports: list of special import tuples
+    """
+    grouped_by_base = {}
+    special_imports = []
+
+    for cfg_attr, statement, is_pub in use_statements:
+        prefix_len = 8 if is_pub else 4
+        import_path = statement[prefix_len:-1].strip()
+
+        # Keep as special import if it has no '::' or is a glob
+        if "::" not in import_path or import_path.endswith("::*"):
+            special_imports.append((cfg_attr, statement, is_pub))
+            continue
+
+        # If the import contains braces, expand to base_path -> items mapping
+        if "{" in import_path:
+            mapping = process_import_with_braces(import_path)
+            for base_path, items in mapping.items():
+                key = (base_path, is_pub)
+                if key not in grouped_by_base:
+                    grouped_by_base[key] = {}
+                attr_key = cfg_attr or ""
+                grouped_by_base[key].setdefault(attr_key, set()).update(items)
+        else:
+            parts = [p for p in import_path.split("::") if p]
+            if len(parts) >= 2:
+                base_path = "::".join(parts[:-1])
+                item = parts[-1]
+            else:
+                base_path = parts[0]
+                item = parts[-1]
+
+            key = (base_path, is_pub)
+            if key not in grouped_by_base:
+                grouped_by_base[key] = {}
+            attr_key = cfg_attr or ""
+            grouped_by_base[key].setdefault(attr_key, set()).add(item)
+
+    return grouped_by_base, special_imports
