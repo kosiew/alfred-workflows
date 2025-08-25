@@ -569,6 +569,27 @@ def format_high_group(root, is_pub, group, common_sub):
         upper_items = sorted([it for it in items if not (it and it[0].islower())])
         return lower_items + upper_items
 
+    # If highest_common_subpath returned empty, try to find a candidate prefix
+    # that appears in at least two subpaths (e.g. 'array' from 'array' and
+    # 'array::builder'). This enables grouping of related subpaths even when
+    # other sibling subpaths differ.
+    if not common_sub:
+        counts = {}
+        for s in group["submap"].keys():
+            if not s:
+                continue
+            parts = s.split("::")
+            for i in range(1, len(parts) + 1):
+                candidate_prefix = "::".join(parts[:i])
+                counts[candidate_prefix] = counts.get(candidate_prefix, 0) + 1
+
+        # Pick the longest prefix (most specific) that appears at least twice
+        common_candidates = [p for p, c in counts.items() if c >= 2]
+        if common_candidates:
+            # sort by number of components (descending), then lexicographically
+            common_candidates.sort(key=lambda x: (-len(x.split("::")), x))
+            common_sub = common_candidates[0]
+
     if common_sub:
         # collect everything under common_sub
         inner_map = {}
@@ -596,21 +617,49 @@ def format_high_group(root, is_pub, group, common_sub):
                 seen.add(r)
                 ordered_remainders.append(r)
 
-        lines.append(f"{prefix}{root}::{common_sub}::{{")
+        # We want to emit a top-level root grouping and then a single entry for the
+        # common_sub that contains both the direct items and any rem->items as
+        # entries (e.g. builder::ArrayBuilder) so that `array::{..., builder::X}`
+        # appears inside the `arrow::{ array::{...}, ... }` block.
+        lines.append(f"{prefix}{root}::{{")
+
+        # Build combined entries for the common_sub block
+        combined = []
         for rem in ordered_remainders:
             items = inner_map.get(rem, set())
             sorted_items = _sorted_items(items)
-
             if rem == "":
+                # direct items under the common_sub
+                combined.extend(sorted_items)
+            else:
+                # sub-remainders become items like `rem::Name` or `rem::{A, B}`
+                if len(sorted_items) == 1:
+                    combined.append(f"{rem}::{sorted_items[0]}")
+                else:
+                    combined.append(f"{rem}::{{{', '.join(sorted_items)}}}")
+
+        # Format the common_sub entry
+        if len(combined) == 1:
+            lines.append(f"    {common_sub}::{combined[0]},")
+        else:
+            lines.append(f"    {common_sub}::{{{', '.join(combined)}}},")
+
+        # There may be other subpaths that didn't match common_sub; include them
+        # after the common_sub block if present.
+        other_subs = [s for s in group["order"] if not (s == "" or s.startswith(common_sub))]
+        for sub in other_subs:
+            items = group["submap"].get(sub, set())
+            sorted_items = _sorted_items(items)
+            if sub == "":
                 if len(sorted_items) == 1:
                     lines.append(f"    {sorted_items[0]},")
                 else:
                     lines.append(f"    {{{', '.join(sorted_items)}}},")
             else:
                 if len(sorted_items) == 1:
-                    lines.append(f"    {rem}::{sorted_items[0]},")
+                    lines.append(f"    {sub}::{sorted_items[0]},")
                 else:
-                    lines.append(f"    {rem}::{{{', '.join(sorted_items)}}},")
+                    lines.append(f"    {sub}::{{{', '.join(sorted_items)}}},")
 
         lines.append("};")
     else:
