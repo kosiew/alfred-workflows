@@ -214,6 +214,11 @@ from rust_import_helpers import (
 )
 
 def streamline_rust_imports(text):
+    return streamline_rust_imports_high(text)
+
+# deprecated this
+# it is neither ..low or ..high
+def _streamline_rust_imports(text):
     """Streamlines Rust import statements by consolidating imports with the same base path."""
     if not text or text.isspace():
         return text
