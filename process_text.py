@@ -268,8 +268,8 @@ def streamline_rust_imports_high(text):
 
     for (root, is_pub) in sorted(root_groups.keys()):
         group = root_groups[(root, is_pub)]
-    common_sub = highest_common_subpath(group)
-    result.extend(format_high_group(root, is_pub, group, common_sub))
+        common_sub = highest_common_subpath(group)
+        result.extend(format_high_group(root, is_pub, group, common_sub))
 
     if other_lines and result:
         return "\n".join(other_lines + [""] + result)

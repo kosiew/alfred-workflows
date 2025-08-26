@@ -538,9 +538,18 @@ def collect_root_groups(use_statements):
 
 
 def highest_common_subpath(group):
-    """Return the highest common subpath among non-empty subpaths in a group."""
+    """Return the highest common subpath among non-empty subpaths in a group.
+    
+    If there are both empty and non-empty subpaths, return empty string to avoid
+    incorrectly merging items from different module levels.
+    """
     subpaths = [s for s in group["submap"].keys() if s is not None]
     nonempty = [s for s in subpaths if s]
+    
+    # If we have both empty and non-empty subpaths, don't try to find a common prefix
+    # as this would incorrectly merge items from different module levels
+    if "" in subpaths and nonempty:
+        return ""
 
     if not nonempty:
         return ""
@@ -669,10 +678,8 @@ def format_high_group(root, is_pub, group, common_sub):
             sorted_items = _sorted_items(items)
 
             if sub == "":
-                if len(sorted_items) == 1:
-                    inner_entries.append(f"{sorted_items[0]}")
-                else:
-                    inner_entries.append(f"{{{', '.join(sorted_items)}}}")
+                # For empty subpath (direct imports), add items individually
+                inner_entries.extend(sorted_items)
             else:
                 if len(sorted_items) == 1:
                     inner_entries.append(f"{sub}::{sorted_items[0]}")
