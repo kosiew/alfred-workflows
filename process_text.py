@@ -5,6 +5,7 @@ import os
 import subprocess  # newly added
 from pathlib import Path  # newly added
 import time  # newly added
+import html2text  # for HTML to markdown conversion
 from python_import_helpers import parse_python_import_statements, generate_python_import_statements
 
 # Constants for Alfred workflow
@@ -482,6 +483,43 @@ def remove_plus_prefix(text):
     return "\n".join(filtered_lines)
 
 
+def html_to_markdown(html_content):
+    """Converts HTML content to markdown format."""
+    try:
+        # Create html2text instance
+        h = html2text.HTML2Text()
+        
+        # Configure options for better conversion
+        h.ignore_links = False  # Keep links
+        h.ignore_images = False  # Keep images
+        h.ignore_emphasis = False  # Keep bold/italic
+        h.body_width = 0  # Don't wrap lines
+        h.unicode_snob = True  # Use unicode characters
+        h.escape_snob = True  # Escape special characters
+        
+        # Convert HTML to markdown
+        markdown_content = h.handle(html_content)
+        
+        # Clean up extra newlines
+        markdown_content = re.sub(r'\n\s*\n\s*\n', '\n\n', markdown_content)
+        
+        return markdown_content.strip()
+    except Exception as e:
+        # Fallback: basic HTML tag removal if html2text fails
+        # Remove common HTML tags
+        text = re.sub(r'<br\s*/?>', '\n', html_content)
+        text = re.sub(r'<p[^>]*>', '\n', text)
+        text = re.sub(r'</p>', '\n', text)
+        text = re.sub(r'<strong[^>]*>(.*?)</strong>', r'**\1**', text)
+        text = re.sub(r'<b[^>]*>(.*?)</b>', r'**\1**', text)
+        text = re.sub(r'<em[^>]*>(.*?)</em>', r'*\1*', text)
+        text = re.sub(r'<i[^>]*>(.*?)</i>', r'*\1*', text)
+        text = re.sub(r'<a[^>]*href=["\']([^"\']*)["\'][^>]*>(.*?)</a>', r'[\2](\1)', text)
+        text = re.sub(r'<[^>]+>', '', text)  # Remove remaining tags
+        text = re.sub(r'\n\s*\n\s*\n', '\n\n', text)  # Clean up newlines
+        return text.strip()
+
+
 def do():
     """Main function to handle Alfred workflow input and output."""
     action = sys.argv[1]
@@ -743,6 +781,24 @@ def do():
                 ARG: processed_text,
                 VARIABLES: {
                     MESSAGE: "Diffed result shown!",
+                    MESSAGE_TITLE: "Success",
+                },
+            }
+        }
+
+    elif action == "html_to_markdown":
+        # Get input HTML from Alfred environment variable
+        input_html = os.getenv("entry", "").strip()
+
+        # Convert HTML to markdown
+        markdown_text = html_to_markdown(input_html)
+
+        # Prepare JSON output for Alfred
+        output = {
+            ALFREDWORKFLOW: {
+                ARG: markdown_text,
+                VARIABLES: {
+                    MESSAGE: "HTML converted to markdown!",
                     MESSAGE_TITLE: "Success",
                 },
             }
