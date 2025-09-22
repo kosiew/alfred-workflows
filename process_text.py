@@ -483,6 +483,14 @@ def remove_plus_prefix(text):
     return "\n".join(filtered_lines)
 
 
+def remove_spaces(text):
+    """Removes all spaces from the input text."""
+    if not text:
+        return text
+    
+    return text.replace(" ", "")
+
+
 def html_to_markdown(html_content):
     """Converts HTML content to markdown format."""
     try:
@@ -799,6 +807,24 @@ def do():
                 ARG: markdown_text,
                 VARIABLES: {
                     MESSAGE: "HTML converted to markdown!",
+                    MESSAGE_TITLE: "Success",
+                },
+            }
+        }
+
+    elif action == "remove_spaces":
+        # Get input text from Alfred environment variable
+        input_text = os.getenv("entry", "").strip()
+
+        # Remove all spaces from the text
+        processed_text = remove_spaces(input_text)
+
+        # Prepare JSON output for Alfred
+        output = {
+            ALFREDWORKFLOW: {
+                ARG: processed_text,
+                VARIABLES: {
+                    MESSAGE: "Spaces removed!",
                     MESSAGE_TITLE: "Success",
                 },
             }
