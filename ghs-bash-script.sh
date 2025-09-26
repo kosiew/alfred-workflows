@@ -183,6 +183,12 @@ generate_repo_actions() {
         \"mods\": {\"cmd\": {\"subtitle\": \"⌘: Copy Tags URL to clipboard\", \"arg\": \"https://github.com/$repo_name/tags\"}}
       },
       {
+        \"title\": \"$repo_name Actions\",
+        \"subtitle\": \"View GitHub Actions\",
+        \"arg\": \"https://github.com/$repo_name/actions\",
+        \"mods\": {\"cmd\": {\"subtitle\": \"⌘: Copy Actions URL to clipboard\", \"arg\": \"https://github.com/$repo_name/actions\"}}
+      },
+      {
         \"title\": \"$repo_name Create PR\",
         \"subtitle\": \"Create a New Pull Request\",
         \"arg\": \"https://github.com/$repo_name/compare/main...$GITHUB_USERNAME:$repo_name:xxx?expand=1\",
