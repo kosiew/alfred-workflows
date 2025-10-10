@@ -35,11 +35,22 @@ def _run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, **kw)
 
 def _llm(flags: list[str], prompt: str, input_text: Optional[str] = None) -> str:
-    try:
-        proc = _run(["llm", *flags, prompt], input=input_text)
-        return proc.stdout or ""
-    except Exception:
-        return "llm failed"
+    """Call llm CLI tool with the given flags and prompt.
+    
+    Returns the stdout output, or raises an exception if the command fails.
+    """
+    # Build command exactly like the working shorten function
+    cmd = ["llm", *flags, prompt]
+    
+    proc = subprocess.run(
+        cmd,
+        input=input_text,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    
+    return proc.stdout or "ARGH"
 
 def _unwrap_fenced(text: str) -> str:
     """Remove markdown code fences from text if present."""
@@ -872,40 +883,68 @@ def do():
             )
             
             try:
-                llm_output = _llm(["-s"], prompt, input_text=clip_content)
-                if not llm_output or llm_output == "llm failed":
-                    # Fallback: try without -s flag
-                    proc = _run(["llm", prompt], input=clip_content)
-                    llm_output = proc.stdout or ""
+                # Call llm without -s flag (like the working shorten function)
+                llm_output = _llm([], prompt, input_text=clip_content)
                 
-                commit_msg = _unwrap_fenced(llm_output).strip()
-                
-                if not commit_msg:
+                if not llm_output:
                     output = {
                         ALFREDWORKFLOW: {
                             ARG: "",
                             VARIABLES: {
-                                MESSAGE: "LLM returned empty commit message",
+                                MESSAGE: "LLM returned empty output",
                                 MESSAGE_TITLE: "Error",
                             },
                         }
                     }
                 else:
-                    output = {
-                        ALFREDWORKFLOW: {
-                            ARG: commit_msg,
-                            VARIABLES: {
-                                MESSAGE: "Commit message generated!",
-                                MESSAGE_TITLE: "Success",
-                            },
+                    commit_msg = _unwrap_fenced(llm_output).strip()
+                    
+                    if not commit_msg:
+                        output = {
+                            ALFREDWORKFLOW: {
+                                ARG: llm_output,  # Return raw output for debugging
+                                VARIABLES: {
+                                    MESSAGE: "LLM output was empty after unwrapping",
+                                    MESSAGE_TITLE: "Error",
+                                },
+                            }
                         }
+                    else:
+                        output = {
+                            ALFREDWORKFLOW: {
+                                ARG: commit_msg,
+                                VARIABLES: {
+                                    MESSAGE: "Commit message generated!",
+                                    MESSAGE_TITLE: "Success",
+                                },
+                            }
+                        }
+            except subprocess.CalledProcessError as e:
+                output = {
+                    ALFREDWORKFLOW: {
+                        ARG: "",
+                        VARIABLES: {
+                            MESSAGE: f"llm command failed: {e.stderr or e.stdout or str(e)}",
+                            MESSAGE_TITLE: "Error",
+                        },
                     }
+                }
+            except FileNotFoundError:
+                output = {
+                    ALFREDWORKFLOW: {
+                        ARG: "",
+                        VARIABLES: {
+                            MESSAGE: "llm command not found in PATH",
+                            MESSAGE_TITLE: "Error",
+                        },
+                    }
+                }
             except Exception as e:
                 output = {
                     ALFREDWORKFLOW: {
                         ARG: "",
                         VARIABLES: {
-                            MESSAGE: f"LLM generation failed: {str(e)}",
+                            MESSAGE: f"Error: {type(e).__name__}: {str(e)}",
                             MESSAGE_TITLE: "Error",
                         },
                     }
