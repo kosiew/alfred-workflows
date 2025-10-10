@@ -41,6 +41,13 @@ def _llm(flags: list[str], prompt: str, input_text: Optional[str] = None) -> str
     except Exception:
         return "llm failed"
 
+def _unwrap_fenced(text: str) -> str:
+    """Remove markdown code fences from text if present."""
+    lines = text.strip().split("\n")
+    if len(lines) >= 2 and lines[0].startswith("```") and lines[-1].startswith("```"):
+        return "\n".join(lines[1:-1])
+    return text
+
 def process_text(text):
     """Formats text by censoring the first word and replacing later occurrences with '~'."""
     # Extract the first two lines
@@ -842,6 +849,67 @@ def do():
                 },
             }
         }
+
+    elif action == "clip_to_commit":
+        # Get clipboard content from Alfred environment variable
+        clip_content = os.getenv("entry", "").strip()
+
+        if not clip_content:
+            output = {
+                ALFREDWORKFLOW: {
+                    ARG: "",
+                    VARIABLES: {
+                        MESSAGE: "Clipboard is empty",
+                        MESSAGE_TITLE: "Error",
+                    },
+                }
+            }
+        else:
+            # Generate commit message using llm
+            prompt = (
+                "Generate a git commit message: one-line subject (imperative, max 50 chars), "
+                "blank line, then a short body wrapped at ~72 chars. Do not include code fences."
+            )
+            
+            try:
+                llm_output = _llm(["-s"], prompt, input_text=clip_content)
+                if not llm_output or llm_output == "llm failed":
+                    # Fallback: try without -s flag
+                    proc = _run(["llm", prompt], input=clip_content)
+                    llm_output = proc.stdout or ""
+                
+                commit_msg = _unwrap_fenced(llm_output).strip()
+                
+                if not commit_msg:
+                    output = {
+                        ALFREDWORKFLOW: {
+                            ARG: "",
+                            VARIABLES: {
+                                MESSAGE: "LLM returned empty commit message",
+                                MESSAGE_TITLE: "Error",
+                            },
+                        }
+                    }
+                else:
+                    output = {
+                        ALFREDWORKFLOW: {
+                            ARG: commit_msg,
+                            VARIABLES: {
+                                MESSAGE: "Commit message generated!",
+                                MESSAGE_TITLE: "Success",
+                            },
+                        }
+                    }
+            except Exception as e:
+                output = {
+                    ALFREDWORKFLOW: {
+                        ARG: "",
+                        VARIABLES: {
+                            MESSAGE: f"LLM generation failed: {str(e)}",
+                            MESSAGE_TITLE: "Error",
+                        },
+                    }
+                }
 
     output_json(output)
 if __name__ == "__main__":    do()# github repo alfred-workflows
