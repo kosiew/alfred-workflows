@@ -7,6 +7,7 @@ from pathlib import Path  # newly added
 import time  # newly added
 import html2text  # for HTML to markdown conversion
 from python_import_helpers import parse_python_import_statements, generate_python_import_statements
+from typing import Optional
 
 # Constants for Alfred workflow
 ITEMS = "items"
@@ -27,6 +28,18 @@ def output_json(a_dict):
     """Outputs a dictionary as JSON to stdout."""
     sys.stdout.write(json.dumps(a_dict))
 
+def _run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
+    kw.setdefault("check", True)
+    kw.setdefault("text", True)
+    kw.setdefault("capture_output", True)
+    return subprocess.run(cmd, **kw)
+
+def _llm(flags: list[str], prompt: str, input_text: Optional[str] = None) -> str:
+    try:
+        proc = _run(["llm", *flags, prompt], input=input_text)
+        return proc.stdout or ""
+    except Exception:
+        return "llm failed"
 
 def process_text(text):
     """Formats text by censoring the first word and replacing later occurrences with '~'."""
