@@ -9,6 +9,9 @@ import html2text  # for HTML to markdown conversion
 from python_import_helpers import parse_python_import_statements, generate_python_import_statements
 from typing import Optional
 
+# Full path to llm executable (aliases won't be available inside subprocess)
+LLM_PATH = "/Users/kosiew/GitHub/llm/.venv/bin/llm"
+
 # Constants for Alfred workflow
 ITEMS = "items"
 TITLE = "title"
@@ -35,8 +38,14 @@ def _run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, **kw)
 
 def _llm(flags: list[str], prompt: str, input_text: Optional[str] = None) -> str:
+    """Call llm CLI tool with the given flags and prompt.
+    
+    Returns the stdout output, or raises an exception if the command fails.
+    Note: Uses full path to llm since subprocess doesn't expand shell aliases.
+    """
     try:
-        proc = _run(["llm", *flags, prompt], input=input_text)
+        # Use the module-level LLM_PATH constant
+        proc = _run([LLM_PATH, *flags, prompt], input=input_text)
         return proc.stdout or ""
     except Exception:
         return "llm failed"
@@ -204,7 +213,7 @@ def rename_dalle_files():
 
 def shorten(phrase, number_of_words=2):
     result = subprocess.run(
-        ["llm", "-m", "l32", f"shorten to {number_of_words} meaningful unique word"],
+        [LLM_PATH, "-m", "l32", f"shorten to {number_of_words} meaningful unique word"],
         input=phrase.name,
         text=True,
         capture_output=True,
@@ -865,18 +874,22 @@ def do():
                 }
             }
         else:
-            # Generate commit message using llm
-            prompt = (
-                "Generate a git commit message: one-line subject (imperative, max 50 chars), "
-                "blank line, then a short body wrapped at ~72 chars. Do not include code fences."
+            # Generate commit message using llm (without -s flag, just like shorten)
+            # Combine the instruction and content in the input, like shorten does
+            full_prompt = (
+                f"Generate a git commit message for the following changes. "
+                f"Use imperative mood, max 50 chars for subject, blank line, "
+                f"then a short body wrapped at ~72 chars. Do not include code fences.\n\n"
+                f"Changes:\n{clip_content}"
             )
             
             try:
-                llm_output = _llm(["-s"], prompt, input_text=clip_content)
+                # Call llm without flags or input_text, putting everything in prompt like shorten
+                llm_output = _llm([], full_prompt, input_text=None)
+                
                 if not llm_output or llm_output == "llm failed":
-                    # Fallback: try without -s flag
-                    proc = _run(["llm", prompt], input=clip_content)
-                    llm_output = proc.stdout or ""
+                    # This shouldn't happen, but keep fallback
+                    llm_output = ""
                 
                 commit_msg = _unwrap_fenced(llm_output).strip()
                 
