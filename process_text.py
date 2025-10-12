@@ -31,6 +31,26 @@ def output_json(a_dict):
     """Outputs a dictionary as JSON to stdout."""
     sys.stdout.write(json.dumps(a_dict))
 
+
+def make_alfred_output(arg_value, variables: dict | None = None):
+    """Create a standard Alfred workflow output dict.
+
+    Args:
+        arg_value: The value to place in the top-level "arg" field.
+        variables: Optional dictionary of variables to place under "variables".
+
+    Returns:
+        A dict shaped as {ALFREDWORKFLOW: {ARG: arg_value, VARIABLES: {...}}}
+    """
+    if variables is None:
+        variables = {}
+    return {
+        ALFREDWORKFLOW: {
+            ARG: arg_value,
+            VARIABLES: variables,
+        }
+    }
+
 def _run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
     kw.setdefault("check", True)
     kw.setdefault("text", True)
@@ -191,22 +211,9 @@ def rename_dalle_files():
         new_path = recent_file.parent / short_name
         recent_file.rename(new_path)
 
-        output = {
-            ALFREDWORKFLOW: {
-                ARG: short_name,
-                VARIABLES: {
-                    MESSAGE: f"Renamed → {short_name}",
-                    MESSAGE_TITLE: "Rename Success",
-                },
-            }
-        }
+        output = make_alfred_output(short_name, {MESSAGE: f"Renamed → {short_name}", MESSAGE_TITLE: "Rename Success"})
     except Exception as e:
-        output = {
-            ALFREDWORKFLOW: {
-                ARG: str(e),
-                VARIABLES: {MESSAGE: f"Error: {e}", MESSAGE_TITLE: "Rename Failed"},
-            }
-        }
+        output = make_alfred_output(str(e), {MESSAGE: f"Error: {e}", MESSAGE_TITLE: "Rename Failed"})
 
     return output
 
@@ -566,15 +573,7 @@ def generate_commit_message_from_clip(clip_content: str):
     fenced output, and returns the appropriate Alfred-formatted dict.
     """
     if not clip_content:
-        return {
-            ALFREDWORKFLOW: {
-                ARG: "",
-                VARIABLES: {
-                    MESSAGE: "Clipboard is empty",
-                    MESSAGE_TITLE: "Error",
-                },
-            }
-        }
+        return make_alfred_output("", {MESSAGE: "Clipboard is empty", MESSAGE_TITLE: "Error"})
 
     # Build the full prompt similar to the previous inline code
     full_prompt = (
@@ -593,35 +592,46 @@ def generate_commit_message_from_clip(clip_content: str):
         commit_msg = _unwrap_fenced(llm_output).strip()
 
         if not commit_msg:
-            return {
-                ALFREDWORKFLOW: {
-                    ARG: "",
-                    VARIABLES: {
-                        MESSAGE: "LLM returned empty commit message",
-                        MESSAGE_TITLE: "Error",
-                    },
-                }
-            }
+            return make_alfred_output("", {MESSAGE: "LLM returned empty commit message", MESSAGE_TITLE: "Error"})
 
-        return {
-            ALFREDWORKFLOW: {
-                ARG: commit_msg,
-                VARIABLES: {
-                    MESSAGE: "Commit message generated!",
-                    MESSAGE_TITLE: "Success",
-                },
-            }
-        }
+        return make_alfred_output(commit_msg, {MESSAGE: "Commit message generated!", MESSAGE_TITLE: "Success"})
     except Exception as e:
-        return {
-            ALFREDWORKFLOW: {
-                ARG: "",
-                VARIABLES: {
-                    MESSAGE: f"LLM generation failed: {str(e)}",
-                    MESSAGE_TITLE: "Error",
-                },
-            }
-        }
+        return make_alfred_output("", {MESSAGE: f"LLM generation failed: {str(e)}", MESSAGE_TITLE: "Error"})
+
+
+def generate_commit_range_from_clip(clip_content: str):
+    """Parse a git log-like clipboard content and return Alfred VARIABLES
+    containing 'start' (oldest commit in list) and 'end' (newest commit in list).
+
+    The input is expected to contain commit lines that start with a SHA (7+ hex
+    chars). We will collect all SHAs in the text in appearance order and then
+    set 'end' to the first SHA found (newest) and 'start' to the last SHA found
+    (oldest).
+    """
+    if not clip_content:
+        return make_alfred_output("", {MESSAGE: "Clipboard is empty", MESSAGE_TITLE: "Error"})
+
+    # Regex to find commit SHAs (7 to 40 hex chars) at the start of a line or after a pipe/symbol
+    sha_regex = re.compile(r"\b([0-9a-f]{7,40})\b", re.IGNORECASE)
+
+    shas = sha_regex.findall(clip_content)
+
+    # Deduplicate while preserving order
+    seen = set()
+    ordered_shas = []
+    for s in shas:
+        if s not in seen:
+            seen.add(s)
+            ordered_shas.append(s)
+
+    if not ordered_shas:
+        return make_alfred_output("", {MESSAGE: "No commit SHAs found in clipboard", MESSAGE_TITLE: "Error"})
+
+    # Newest is first appearance, oldest is last
+    end_sha = ordered_shas[0]
+    start_sha = ordered_shas[-1]
+
+    return make_alfred_output(f"{start_sha}..{end_sha}", {MESSAGE: "Commit range prepared", MESSAGE_TITLE: "Success", "start": start_sha, "end": end_sha})
 
 
 def do():
@@ -636,17 +646,7 @@ def do():
         word, meaning = process_text(input_text)
 
         # Prepare JSON output for Alfred
-        output = {
-            ALFREDWORKFLOW: {
-                ARG: word,
-                VARIABLES: {
-                    MESSAGE: "Transformed text copied!",
-                    MESSAGE_TITLE: "Success",
-                    WORD: word,
-                    MEANING: meaning,
-                },
-            }
-        }
+        output = make_alfred_output(word, {MESSAGE: "Transformed text copied!", MESSAGE_TITLE: "Success", WORD: word, MEANING: meaning})
 
     if action == "parse_whatsapp_number":
         # Get input text from Alfred environment variable
@@ -659,16 +659,7 @@ def do():
             phone_number = "+6" + phone_number
 
         # Prepare JSON output for Alfred
-        output = {
-            ALFREDWORKFLOW: {
-                ARG: phone_number,
-                VARIABLES: {
-                    MESSAGE: "Phone number copied!",
-                    MESSAGE_TITLE: phone_number,
-                    WHATSAPP_NUMBER: phone_number,
-                },
-            }
-        }
+        output = make_alfred_output(phone_number, {MESSAGE: "Phone number copied!", MESSAGE_TITLE: phone_number, WHATSAPP_NUMBER: phone_number})
 
     elif action == "streamline_use_in_rust":
         # Get input text from Alfred environment variable
@@ -678,15 +669,7 @@ def do():
         streamlined_text = streamline_rust_imports(input_text)
 
         # Prepare JSON output for Alfred
-        output = {
-            ALFREDWORKFLOW: {
-                ARG: streamlined_text,
-                VARIABLES: {
-                    MESSAGE: "Streamlined imports copied!",
-                    MESSAGE_TITLE: "Success",
-                },
-            }
-        }
+        output = make_alfred_output(streamlined_text, {MESSAGE: "Streamlined imports copied!", MESSAGE_TITLE: "Success"})
         
     elif action == "streamline_use_in_rust_high":
         # Get input text from Alfred environment variable
@@ -696,15 +679,7 @@ def do():
         streamlined_text = streamline_rust_imports_high(input_text)
 
         # Prepare JSON output for Alfred
-        output = {
-            ALFREDWORKFLOW: {
-                ARG: streamlined_text,
-                VARIABLES: {
-                    MESSAGE: "Streamlined imports copied!",
-                    MESSAGE_TITLE: "Success",
-                },
-            }
-        }
+        output = make_alfred_output(streamlined_text, {MESSAGE: "Streamlined imports copied!", MESSAGE_TITLE: "Success"})
         
     elif action == "streamline_use_in_rust_low":
         # Get input text from Alfred environment variable
@@ -714,15 +689,7 @@ def do():
         streamlined_text = streamline_rust_imports_low(input_text)
 
         # Prepare JSON output for Alfred
-        output = {
-            ALFREDWORKFLOW: {
-                ARG: streamlined_text,
-                VARIABLES: {
-                    MESSAGE: "Streamlined imports copied!",
-                    MESSAGE_TITLE: "Success",
-                },
-            }
-        }
+        output = make_alfred_output(streamlined_text, {MESSAGE: "Streamlined imports copied!", MESSAGE_TITLE: "Success"})
 
     elif action == "streamline_import_in_python":
         # Get input text from Alfred environment variable
@@ -732,15 +699,7 @@ def do():
         streamlined_text = streamline_python_imports(input_text)
 
         # Prepare JSON output for Alfred
-        output = {
-            ALFREDWORKFLOW: {
-                ARG: streamlined_text,
-                VARIABLES: {
-                    MESSAGE: "Streamlined imports copied!",
-                    MESSAGE_TITLE: "Success",
-                },
-            }
-        }
+        output = make_alfred_output(streamlined_text, {MESSAGE: "Streamlined imports copied!", MESSAGE_TITLE: "Success"})
 
     elif action == "remove_println_in_rust":
         # Get input text from Alfred environment variable
@@ -750,15 +709,7 @@ def do():
         filtered_text = remove_rust_printlns(input_text)
 
         # Prepare JSON output for Alfred
-        output = {
-            ALFREDWORKFLOW: {
-                ARG: filtered_text,
-                VARIABLES: {
-                    MESSAGE: "Debug printlns removed!",
-                    MESSAGE_TITLE: "Success",
-                },
-            }
-        }
+        output = make_alfred_output(filtered_text, {MESSAGE: "Debug printlns removed!", MESSAGE_TITLE: "Success"})
 
     elif action == "remove_print_in_python":
         # Get input text from Alfred environment variable
@@ -768,15 +719,7 @@ def do():
         filtered_text = remove_python_prints(input_text)
 
         # Prepare JSON output for Alfred
-        output = {
-            ALFREDWORKFLOW: {
-                ARG: filtered_text,
-                VARIABLES: {
-                    MESSAGE: "Debug prints removed!",
-                    MESSAGE_TITLE: "Success",
-                },
-            }
-        }
+        output = make_alfred_output(filtered_text, {MESSAGE: "Debug prints removed!", MESSAGE_TITLE: "Success"})
 
     elif action == "remove_metadata":
         # Get image path from Alfred environment variable
@@ -786,15 +729,7 @@ def do():
         success, message = strip_metadata(image_path)
 
         # Prepare JSON output for Alfred
-        output = {
-            ALFREDWORKFLOW: {
-                ARG: image_path if success else message,
-                VARIABLES: {
-                    MESSAGE: message,
-                    MESSAGE_TITLE: "Success" if success else "Error",
-                },
-            }
-        }
+        output = make_alfred_output(image_path if success else message, {MESSAGE: message, MESSAGE_TITLE: "Success" if success else "Error"})
 
     elif action == "rename_dalle_file":  # newly added action branch= "__main__":
         output = rename_dalle_files()
@@ -807,15 +742,7 @@ def do():
         result = check_string_match(input_text, search_string)
 
         # Prepare JSON output for Alfred
-        output = {
-            ALFREDWORKFLOW: {
-                ARG: result,
-                VARIABLES: {
-                    MESSAGE: f"{result} - '{search_string}' in input",
-                    MESSAGE_TITLE: "Check String Match",
-                },
-            }
-        }
+        output = make_alfred_output(result, {MESSAGE: f"{result} - '{search_string}' in input", MESSAGE_TITLE: "Check String Match"})
         
     elif action == "substitute_search_string":
         # Get input text and search string from Alfred environment variables
@@ -827,15 +754,7 @@ def do():
         result_text = input_text.replace(search_string, replace_with)
 
         # Prepare JSON output for Alfred
-        output = {
-            ALFREDWORKFLOW: {
-                ARG: result_text,
-                VARIABLES: {
-                    MESSAGE: f"Replaced '{search_string}' with '{replace_with}'",
-                    MESSAGE_TITLE: "String Substitution",
-                },
-            }
-        }
+        output = make_alfred_output(result_text, {MESSAGE: f"Replaced '{search_string}' with '{replace_with}'", MESSAGE_TITLE: "String Substitution"})
 
     elif action == "remove_plus_prefix":
         # Get input text from Alfred environment variable
@@ -845,15 +764,7 @@ def do():
         filtered_text = remove_plus_prefix(input_text)
 
         # Prepare JSON output for Alfred
-        output = {
-            ALFREDWORKFLOW: {
-                ARG: filtered_text,
-                VARIABLES: {
-                    MESSAGE: "Plus/minus prefixes removed!",
-                    MESSAGE_TITLE: "Success",
-                },
-            }
-        }
+        output = make_alfred_output(filtered_text, {MESSAGE: "Plus/minus prefixes removed!", MESSAGE_TITLE: "Success"})
 
     elif action == "show_diffed_result":
         # Get input text from Alfred environment variable
@@ -863,15 +774,7 @@ def do():
         processed_text = show_diffed_result(input_text)
 
         # Prepare JSON output for Alfred
-        output = {
-            ALFREDWORKFLOW: {
-                ARG: processed_text,
-                VARIABLES: {
-                    MESSAGE: "Diffed result shown!",
-                    MESSAGE_TITLE: "Success",
-                },
-            }
-        }
+        output = make_alfred_output(processed_text, {MESSAGE: "Diffed result shown!", MESSAGE_TITLE: "Success"})
     elif action == "show_reverse_diffed_result":
         # Get input text from Alfred environment variable
         input_text = os.getenv("entry", "").rstrip()
@@ -880,15 +783,7 @@ def do():
         processed_text = show_reverse_diffed_result(input_text)
 
         # Prepare JSON output for Alfred
-        output = {
-            ALFREDWORKFLOW: {
-                ARG: processed_text,
-                VARIABLES: {
-                    MESSAGE: "Diffed result shown!",
-                    MESSAGE_TITLE: "Success",
-                },
-            }
-        }
+        output = make_alfred_output(processed_text, {MESSAGE: "Diffed result shown!", MESSAGE_TITLE: "Success"})
 
     elif action == "html_to_markdown":
         # Get input HTML from Alfred environment variable
@@ -898,15 +793,7 @@ def do():
         markdown_text = html_to_markdown(input_html)
 
         # Prepare JSON output for Alfred
-        output = {
-            ALFREDWORKFLOW: {
-                ARG: markdown_text,
-                VARIABLES: {
-                    MESSAGE: "HTML converted to markdown!",
-                    MESSAGE_TITLE: "Success",
-                },
-            }
-        }
+        output = make_alfred_output(markdown_text, {MESSAGE: "HTML converted to markdown!", MESSAGE_TITLE: "Success"})
 
     elif action == "remove_spaces":
         # Get input text from Alfred environment variable
@@ -916,15 +803,7 @@ def do():
         processed_text = remove_spaces(input_text)
 
         # Prepare JSON output for Alfred
-        output = {
-            ALFREDWORKFLOW: {
-                ARG: processed_text,
-                VARIABLES: {
-                    MESSAGE: "Spaces removed!",
-                    MESSAGE_TITLE: "Success",
-                },
-            }
-        }
+        output = make_alfred_output(processed_text, {MESSAGE: "Spaces removed!", MESSAGE_TITLE: "Success"})
 
     elif action == "clip_to_commit":
         # Get clipboard content from Alfred environment variable
@@ -932,5 +811,11 @@ def do():
         # Delegate to helper which returns the Alfred JSON output
         output = generate_commit_message_from_clip(clip_content)
 
+    elif action == "commit_range":
+        # Get clipboard content from Alfred environment variable
+        clip_content = os.getenv("entry", "").strip()
+        output = generate_commit_range_from_clip(clip_content)
+
+    
     output_json(output)
 if __name__ == "__main__":    do()# github repo alfred-workflows
