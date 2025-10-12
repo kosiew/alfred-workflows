@@ -557,6 +557,73 @@ def html_to_markdown(html_content):
         return text.strip()
 
 
+def generate_commit_message_from_clip(clip_content: str):
+    """Generate a git commit message from clipboard content using the LLM and
+    return the Alfred JSON output dictionary.
+
+    This mirrors the previous inline implementation in the `clip_to_commit`
+    branch: it validates input, calls the LLM with a full prompt, unwraps
+    fenced output, and returns the appropriate Alfred-formatted dict.
+    """
+    if not clip_content:
+        return {
+            ALFREDWORKFLOW: {
+                ARG: "",
+                VARIABLES: {
+                    MESSAGE: "Clipboard is empty",
+                    MESSAGE_TITLE: "Error",
+                },
+            }
+        }
+
+    # Build the full prompt similar to the previous inline code
+    full_prompt = (
+        f"Generate a git commit message for the following changes. "
+        f"Use imperative mood, max 50 chars for subject, blank line, "
+        f"then a short body wrapped at ~72 chars. Do not include code fences.\n\n"
+        f"Changes:\n{clip_content}"
+    )
+
+    try:
+        llm_output = _llm([], full_prompt, input_text=None)
+
+        if not llm_output or llm_output == "llm failed":
+            llm_output = ""
+
+        commit_msg = _unwrap_fenced(llm_output).strip()
+
+        if not commit_msg:
+            return {
+                ALFREDWORKFLOW: {
+                    ARG: "",
+                    VARIABLES: {
+                        MESSAGE: "LLM returned empty commit message",
+                        MESSAGE_TITLE: "Error",
+                    },
+                }
+            }
+
+        return {
+            ALFREDWORKFLOW: {
+                ARG: commit_msg,
+                VARIABLES: {
+                    MESSAGE: "Commit message generated!",
+                    MESSAGE_TITLE: "Success",
+                },
+            }
+        }
+    except Exception as e:
+        return {
+            ALFREDWORKFLOW: {
+                ARG: "",
+                VARIABLES: {
+                    MESSAGE: f"LLM generation failed: {str(e)}",
+                    MESSAGE_TITLE: "Error",
+                },
+            }
+        }
+
+
 def do():
     """Main function to handle Alfred workflow input and output."""
     action = sys.argv[1]
@@ -862,67 +929,8 @@ def do():
     elif action == "clip_to_commit":
         # Get clipboard content from Alfred environment variable
         clip_content = os.getenv("entry", "").strip()
-
-        if not clip_content:
-            output = {
-                ALFREDWORKFLOW: {
-                    ARG: "",
-                    VARIABLES: {
-                        MESSAGE: "Clipboard is empty",
-                        MESSAGE_TITLE: "Error",
-                    },
-                }
-            }
-        else:
-            # Generate commit message using llm (without -s flag, just like shorten)
-            # Combine the instruction and content in the input, like shorten does
-            full_prompt = (
-                f"Generate a git commit message for the following changes. "
-                f"Use imperative mood, max 50 chars for subject, blank line, "
-                f"then a short body wrapped at ~72 chars. Do not include code fences.\n\n"
-                f"Changes:\n{clip_content}"
-            )
-            
-            try:
-                # Call llm without flags or input_text, putting everything in prompt like shorten
-                llm_output = _llm([], full_prompt, input_text=None)
-                
-                if not llm_output or llm_output == "llm failed":
-                    # This shouldn't happen, but keep fallback
-                    llm_output = ""
-                
-                commit_msg = _unwrap_fenced(llm_output).strip()
-                
-                if not commit_msg:
-                    output = {
-                        ALFREDWORKFLOW: {
-                            ARG: "",
-                            VARIABLES: {
-                                MESSAGE: "LLM returned empty commit message",
-                                MESSAGE_TITLE: "Error",
-                            },
-                        }
-                    }
-                else:
-                    output = {
-                        ALFREDWORKFLOW: {
-                            ARG: commit_msg,
-                            VARIABLES: {
-                                MESSAGE: "Commit message generated!",
-                                MESSAGE_TITLE: "Success",
-                            },
-                        }
-                    }
-            except Exception as e:
-                output = {
-                    ALFREDWORKFLOW: {
-                        ARG: "",
-                        VARIABLES: {
-                            MESSAGE: f"LLM generation failed: {str(e)}",
-                            MESSAGE_TITLE: "Error",
-                        },
-                    }
-                }
+        # Delegate to helper which returns the Alfred JSON output
+        output = generate_commit_message_from_clip(clip_content)
 
     output_json(output)
 if __name__ == "__main__":    do()# github repo alfred-workflows
