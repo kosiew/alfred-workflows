@@ -634,6 +634,48 @@ def generate_commit_range_from_clip(clip_content: str):
     return make_alfred_output(f"{start_sha}..{end_sha}", {MESSAGE: "Commit range prepared", MESSAGE_TITLE: "Success", "start": start_sha, "end": end_sha})
 
 
+def rewrite_github_blob_for_pr_branch(url: str, pr_branch: str) -> str:
+    """Rewrite a GitHub blob/tree URL to use the owner and branch from pr_branch.
+
+    pr_branch is expected in the form 'owner:branch'. If owner is omitted
+    (no ':' found), only the branch will be replaced. The function supports
+    both 'blob' and 'tree' URL segments and preserves the rest of the path
+    and any fragment (e.g. line anchors).
+
+    Examples:
+        url = 'https://github.com/kosiew/datafusion/blob/test/path/file.rs#L1'
+        pr_branch = 'Jefffrey:acc_args_input_fields'
+        -> 'https://github.com/Jefffrey/datafusion/blob/acc_args_input_fields/path/file.rs#L1'
+    """
+    if not url:
+        return url
+
+    # Parse pr_branch into owner and branch
+    owner = None
+    branch = pr_branch or ""
+    if pr_branch and ":" in pr_branch:
+        owner, branch = pr_branch.split(":", 1)
+
+    # Regex to capture: scheme+host, owner, repo, (blob|tree), branch, optional path, optional fragment
+    m = re.match(r"^(https://github\.com/)([^/]+)/([^/]+)/(blob|tree)/([^/]+)(/[^#]*)?(#.*)?$", url)
+    if not m:
+        # Not a recognized GitHub blob/tree URL; return original
+        return url
+
+    scheme_host = m.group(1)
+    orig_owner = m.group(2)
+    repo = m.group(3)
+    kind = m.group(4)
+    _orig_branch = m.group(5)
+    path = m.group(6) or ""
+    fragment = m.group(7) or ""
+
+    new_owner = owner if owner else orig_owner
+    new_branch = branch if branch else _orig_branch
+
+    return f"{scheme_host}{new_owner}/{repo}/{kind}/{new_branch}{path}{fragment}"
+
+
 def do():
     """Main function to handle Alfred workflow input and output."""
     action = sys.argv[1]
@@ -815,6 +857,17 @@ def do():
         # Get clipboard content from Alfred environment variable
         clip_content = os.getenv("entry", "").strip()
         output = generate_commit_range_from_clip(clip_content)
+
+    elif action == "rewrite_github_blob_for_pr":
+        # Read URL and PR branch from environment variables
+        input_url = os.getenv("entry", "").strip()
+        pr_branch = os.getenv("pr_branch", "").strip()
+
+        # Perform rewrite
+        rewritten = rewrite_github_blob_for_pr_branch(input_url, pr_branch)
+
+        # Prepare JSON output for Alfred
+        output = make_alfred_output(rewritten, {MESSAGE: "URL rewritten", MESSAGE_TITLE: "Success"})
 
     
     output_json(output)
