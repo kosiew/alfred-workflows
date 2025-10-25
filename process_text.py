@@ -634,6 +634,69 @@ def generate_commit_range_from_clip(clip_content: str):
     return make_alfred_output(f"{start_sha}..{end_sha}", {MESSAGE: "Commit range prepared", MESSAGE_TITLE: "Success", "start": start_sha, "end": end_sha})
 
 
+def diff_hunk_to_file_line(input_text: str) -> str:
+    """Parse a unified git diff text and return a single string in the form
+    'path:line' where `path` is the file path without the a/ or b/ prefix
+    and `line` is the starting line number from the hunk header. The
+    function prefers the old-file hunk start (the '-' number). If the old
+    start is 0 (e.g. new file), it falls back to the new-file start.
+
+    Example input contains lines like:
+      --- a/datafusion/core/src/physical_planner.rs
+      +++ b/datafusion/core/src/physical_planner.rs
+      @@ -740,18 +740,23 @@
+
+    Returns an empty string when no path can be determined.
+    """
+    if not input_text:
+        return ""
+
+    path = None
+    # Prefer the +++ b/... line (the new path) if present and not /dev/null
+    for ln in input_text.splitlines():
+        m = re.match(r'^\+\+\+\s+[ab]/(.+)', ln)
+        if m:
+            candidate = m.group(1).strip()
+            if candidate and candidate != '/dev/null':
+                path = candidate
+                break
+
+    # Fall back to --- a/... if +++ wasn't useful
+    if not path:
+        for ln in input_text.splitlines():
+            m = re.match(r'^---\s+[ab]/(.+)', ln)
+            if m:
+                candidate = m.group(1).strip()
+                if candidate and candidate != '/dev/null':
+                    path = candidate
+                    break
+
+    if not path:
+        return ""
+
+    # Find the first @@ hunk header and extract the old/new start numbers
+    for ln in input_text.splitlines():
+        m = re.match(r'^@@\s+-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s+@@', ln)
+        if m:
+            try:
+                old_start = int(m.group(1))
+            except Exception:
+                old_start = 0
+            try:
+                new_start = int(m.group(3))
+            except Exception:
+                new_start = 0
+
+            # Prefer old_start if it's a positive non-zero value, otherwise use new_start
+            line_no = old_start if old_start and old_start != 0 else new_start
+            if not line_no:
+                line_no = 1
+            return f"{path}:{line_no}"
+
+    # No hunk header found — default to line 1
+    return f"{path}:1"
+
+
 def rewrite_github_blob_for_pr_branch(url: str, pr_branch: str) -> str:
     """Rewrite a GitHub blob/tree URL to use the owner and branch from pr_branch.
 
@@ -868,6 +931,15 @@ def do():
 
         # Prepare JSON output for Alfred
         output = make_alfred_output(rewritten, {MESSAGE: "URL rewritten", MESSAGE_TITLE: "Success"})
+
+    elif action == "diff_hunk_to_file_line":
+        # Read unified diff text from Alfred environment variable 'entry'
+        input_text = os.getenv("entry", "").strip()
+
+        # Parse and produce path:line
+        result = diff_hunk_to_file_line(input_text)
+
+        output = make_alfred_output(result, {MESSAGE: "Path:Line extracted", MESSAGE_TITLE: "Success"})
 
     
     output_json(output)
