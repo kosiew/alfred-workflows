@@ -521,7 +521,9 @@ def collect_root_groups(use_statements):
         else:
             parts = [p for p in import_path.split("::") if p]
             root = parts[0]
-            subpath = "::".join(parts[1:-1]) if len(parts) > 2 else parts[1] if len(parts) > 1 else ""
+            # For paths like `root::Item` treat the subpath as empty (direct import)
+            # For longer paths like `root::sub::Item` the subpath should be 'sub'
+            subpath = "::".join(parts[1:-1]) if len(parts) > 2 else ""
             item = parts[-1]
 
             key = (root, is_pub)
