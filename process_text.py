@@ -580,11 +580,10 @@ def generate_commit_message_from_clip(clip_content: str):
         f"Generate a git commit message for the following changes. "
         f"Use imperative mood, max 50 chars for subject, blank line, "
         f"then a short body wrapped at ~72 chars. Do not include code fences.\n\n"
-        f"Changes:\n{clip_content}"
     )
 
     try:
-        llm_output = _llm([], full_prompt, input_text=None)
+        llm_output = _llm([], full_prompt, input_text=f"Changes:\n{clip_content}")
 
         if not llm_output or llm_output == "llm failed":
             llm_output = ""
