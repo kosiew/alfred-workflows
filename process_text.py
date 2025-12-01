@@ -959,6 +959,12 @@ def do():
         clip_content = os.getenv("entry", "").strip()
         # Delegate to helper which returns the Alfred JSON output
         output = generate_commit_message_from_clip(clip_content)
+        
+    elif action == "clip_to_branch":
+        # Get clipboard content from Alfred environment variable
+        clip_content = os.getenv("entry", "").strip()
+        # Delegate to helper which returns the Alfred JSON output with branch name
+        output = generate_branch_name_from_clip(clip_content)
 
     elif action == "commit_range":
         # Get clipboard content from Alfred environment variable

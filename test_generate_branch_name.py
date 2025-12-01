@@ -29,3 +29,21 @@ def test_empty_clipboard_returns_error():
     out = pt.generate_branch_name_from_clip("")
     assert out["alfredworkflow"]["arg"] == ""
     assert "Clipboard is empty" in out["alfredworkflow"]["variables"]["message"]
+
+
+def test_do_action_clip_to_branch(capsys, monkeypatch):
+    """Integration-style test: run do() with action 'clip_to_branch' and capture stdout JSON."""
+    import json, sys, os
+
+    # Stub LLM and set environment/argv
+    pt._llm = lambda flags, prompt, input_text=None: "Improve save logic"
+    monkeypatch.setenv("entry", "ignored")
+    monkeypatch.setattr(sys, "argv", ["process_text.py", "clip_to_branch"])
+
+    # Run do() which writes JSON to stdout
+    pt.do()
+
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+
+    assert data["alfredworkflow"]["arg"] == "improve-save"
