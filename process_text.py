@@ -633,6 +633,51 @@ def generate_commit_range_from_clip(clip_content: str):
     return make_alfred_output(f"{start_sha}..{end_sha}", {MESSAGE: "Commit range prepared", MESSAGE_TITLE: "Success", "start": start_sha, "end": end_sha})
 
 
+def generate_branch_name_from_clip(clip_content: str):
+    """Generate a 1-2 word hyphen-joined summary suitable for a git branch name
+    from clipboard content. This mirrors the commit-message generator but
+    returns a short, sanitized string that contains only lowercase letters,
+    numbers and hyphens (max two words).
+    """
+    if not clip_content:
+        return make_alfred_output("", {MESSAGE: "Clipboard is empty", MESSAGE_TITLE: "Error"})
+
+    # Ask the LLM for a very short 1-2 word summary suitable as a branch name
+    prompt = (
+        "Generate a 1-2 word short summary suitable for a git branch name from the "
+        "following content. Return only the words, lower-case, no surrounding text, "
+        "no code fences. Prefer concise nouns or verb-noun pairs."
+    )
+
+    try:
+        llm_output = _llm([], prompt, input_text=f"Content:\n{clip_content}")
+        if not llm_output or llm_output == "llm failed":
+            llm_output = ""
+
+        candidate = _unwrap_fenced(llm_output).strip().lower()
+
+        # Convert candidate into safe hyphen-joined branch name (keep letters/numbers)
+        words = re.findall(r"[a-z0-9]+", candidate)
+
+        # If LLM didn't produce usable tokens, fall back to extracting from input
+        if not words:
+            words = re.findall(r"[a-z0-9]+", clip_content.lower())
+
+        if not words:
+            return make_alfred_output("", {MESSAGE: "Could not derive branch name", MESSAGE_TITLE: "Error"})
+
+        branch_parts = words[:2]
+        branch_name = "-".join(branch_parts)
+
+        # Trim long names
+        if len(branch_name) > 50:
+            branch_name = branch_name[:50].rstrip("-")
+
+        return make_alfred_output(branch_name, {MESSAGE: "Branch name generated!", MESSAGE_TITLE: "Success"})
+    except Exception as e:
+        return make_alfred_output("", {MESSAGE: f"LLM generation failed: {str(e)}", MESSAGE_TITLE: "Error"})
+
+
 def diff_hunk_to_file_line(input_text: str) -> str:
     """Parse a unified git diff text and return a single string in the form
     'path:line' where `path` is the file path without the a/ or b/ prefix
