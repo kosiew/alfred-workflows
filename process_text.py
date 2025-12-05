@@ -783,6 +783,45 @@ def rewrite_github_blob_for_pr_branch(url: str, pr_branch: str) -> str:
     return f"{scheme_host}{new_owner}/{repo}/{kind}/{new_branch}{path}{fragment}"
 
 
+def open_clipboard_vscode_link(clip_content: str):
+    """Extract a VS Code link from clipboard content and open it.
+    
+    Looks for VS Code links in the format: vscode://file/path/to/file:line
+    or similar patterns found in diff hunks like the example:
+    vscode://file//Users/kosiew/GitHub/datafusion/datafusion/catalog/src/table.rs:80
+    
+    Returns a dict with Alfred output containing success/error messages.
+    """
+    if not clip_content:
+        return make_alfred_output("", {MESSAGE: "Clipboard is empty", MESSAGE_TITLE: "Error"})
+    
+    # Regex to find VS Code links in the format: vscode://file/path/to/file:line
+    vscode_regex = re.compile(r"vscode://file/([^:\s]+)(?::(\d+))?", re.IGNORECASE)
+    match = vscode_regex.search(clip_content)
+    
+    if not match:
+        return make_alfred_output("", {MESSAGE: "No VS Code link found in clipboard", MESSAGE_TITLE: "Error"})
+    
+    file_path = match.group(1)
+    line_number = match.group(2) or "1"
+    
+    try:
+        # Open the file in VS Code using the vscode:// protocol
+        # Format: vscode://file/path/to/file:line:column
+        vscode_link = f"vscode://file/{file_path}:{line_number}"
+        subprocess.run(["open", vscode_link], check=True)
+        
+        return make_alfred_output(
+            vscode_link,
+            {MESSAGE: f"Opened {file_path}:{line_number}", MESSAGE_TITLE: "Success"}
+        )
+    except Exception as e:
+        return make_alfred_output(
+            "",
+            {MESSAGE: f"Failed to open VS Code link: {str(e)}", MESSAGE_TITLE: "Error"}
+        )
+
+
 def do():
     """Main function to handle Alfred workflow input and output."""
     action = sys.argv[1]
@@ -990,6 +1029,12 @@ def do():
         result = diff_hunk_to_file_line(input_text)
 
         output = make_alfred_output(result, {MESSAGE: "Path:Line extracted", MESSAGE_TITLE: "Success"})
+
+    elif action == "open_clipboard_vscode_link":
+        # Get clipboard content from Alfred environment variable
+        clip_content = os.getenv("entry", "").strip()
+        # Extract VS Code link and open it
+        output = open_clipboard_vscode_link(clip_content)
 
     
     output_json(output)
