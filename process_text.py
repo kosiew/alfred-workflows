@@ -347,13 +347,80 @@ def streamline_rust_imports_unique(text):
     if not text or text.isspace():
         return text
 
-    # We only want to remove exact duplicate imports (including their
-    # associated cfg attributes) and otherwise preserve the original
-    # ordering and formatting. We'll scan the original lines and skip
-    # imports we've already seen.
+    # We only want to remove duplicate imports. To be helpful we will
+    # canonicalize import statements so that semantically equivalent
+    # but textually-different imports (spacing, braced vs simple forms,
+    # nested braces) are treated as duplicates, while preserving the
+    # original formatting and ordering of the first occurrence.
+
+    def _canonicalize_import(cfg_attr: str | None, stmt_str: str):
+        """Return a canonical key representing the import's semantics.
+
+        cfg_attr: the cfg attribute string (or None)
+        stmt_str: the stripped import string like 'use foo::bar::{A, B}' or 'use foo::X'
+
+        The key is a tuple: (cfg_norm, is_pub, frozenset(full_paths)) where
+        full_paths are fully-qualified import paths like 'foo::bar::A', or
+        a special wildcard marker 'foo::*' for glob imports.
+        """
+        # Normalize cfg attribute by removing interior whitespace so
+        # variants like '#[cfg(feature = "x")]' and '#[cfg( feature="x" )]'
+        # are treated as equivalent when deduplicating.
+        cfg_norm = re.sub(r"\s+", "", (cfg_attr or "")).strip()
+
+        is_pub = stmt_str.startswith("pub use ")
+        prefix_len = 8 if is_pub else 4
+        import_path = stmt_str[prefix_len:-1].strip()  # drop trailing ';'
+
+        # Wildcard imports remain distinct
+        if import_path.endswith("::*"):
+            return (cfg_norm, is_pub, (import_path,))
+
+        full_paths = set()
+
+        # Braced imports
+        if "{" in import_path:
+            mapping = process_import_with_braces(import_path)
+            for base_path, items in mapping.items():
+                for item in items:
+                    if item == 'self':
+                        full_paths.add(base_path)
+                    else:
+                        full_paths.add(f"{base_path}::{item}")
+        else:
+            # Simple import: full path is the join of parts
+            parts = [p for p in import_path.split("::") if p]
+            if parts:
+                full_paths.add("::".join(parts))
+
+        return (cfg_norm, is_pub, tuple(sorted(full_paths)))
+
+    # We'll scan the original lines and skip imports we've already seen
     lines = text.split("\n")
     out_lines = []
-    seen = set()
+    # Keep a list of seen canonical entries: (cfg_norm, is_pub, set(full_paths))
+    seen_entries: list[tuple[str, bool, set]] = []
+
+    def _is_covered_by(prev_key, new_key):
+        prev_cfg, prev_pub, prev_paths = prev_key
+        new_cfg, new_pub, new_paths = new_key
+        if prev_cfg != new_cfg or prev_pub != new_pub:
+            return False
+
+        for new_item in new_paths:
+            covered = False
+            for prev_item in prev_paths:
+                if prev_item == new_item:
+                    covered = True
+                    break
+                if prev_item.endswith("::*"):
+                    prefix = prev_item[:-3]
+                    if new_item == prefix or new_item.startswith(prefix + "::"):
+                        covered = True
+                        break
+            if not covered:
+                return False
+        return True
 
     i = 0
     while i < len(lines):
@@ -385,9 +452,11 @@ def streamline_rust_imports_unique(text):
                     # Reconstruct a compact statement string for dedup key
                     full_stmt = " ".join([ln.strip() for ln in stmt_lines])
 
-                key = (stripped, full_stmt)
-                if key not in seen:
-                    seen.add(key)
+                key = _canonicalize_import(stripped, full_stmt)
+                new_set = set(key[2])
+
+                if not any(_is_covered_by(prev, key) for prev in seen_entries):
+                    seen_entries.append((key[0], key[1], set(key[2])))
                     out_lines.append(line)
                     out_lines.extend(stmt_lines)
                 # Advance i past the cfg + import block
@@ -398,10 +467,12 @@ def streamline_rust_imports_unique(text):
         if stripped.startswith("pub use ") or stripped.startswith("use "):
             # single-line
             if stripped.endswith(";"):
-                full_stmt = stripped
-                key = ("", full_stmt)
-                if key not in seen:
-                    seen.add(key)
+                stmt_text = stripped
+                key = _canonicalize_import(None, stmt_text)
+                new_set = set(key[2])
+
+                if not any(_is_covered_by(prev, key) for prev in seen_entries):
+                    seen_entries.append((key[0], key[1], set(key[2])))
                     out_lines.append(line)
                 i += 1
                 continue
@@ -415,10 +486,12 @@ def streamline_rust_imports_unique(text):
                 if j < len(lines):
                     stmt_lines.append(lines[j])
 
-                full_stmt = " ".join([ln.strip() for ln in stmt_lines])
-                key = ("", full_stmt)
-                if key not in seen:
-                    seen.add(key)
+                stmt_text = " ".join([ln.strip() for ln in stmt_lines])
+                key = _canonicalize_import(None, stmt_text)
+                new_set = set(key[2])
+
+                if not any(_is_covered_by(prev, key) for prev in seen_entries):
+                    seen_entries.append((key[0], key[1], set(key[2])))
                     out_lines.extend(stmt_lines)
 
                 i = j + 1
