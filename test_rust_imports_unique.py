@@ -91,3 +91,36 @@ fn main() {}
     # cfg variants with different whitespace should dedupe
     assert sum(1 for l in out if l.strip().startswith("#[cfg")) == 1
     assert any(l.strip() == "use foo::Bar;" for l in out)
+
+
+def test_cfg_multiline_braced_import_deduplication():
+    input_text = """
+#[cfg(feature = "z")]
+use foo::{
+    A,
+    B,
+};
+#[cfg(feature = "z")]
+use foo::{ A, B };
+
+fn main() {}
+"""
+    out = streamline_rust_imports_unique(input_text).strip().splitlines()
+    # The cfg feature z block should appear once and the duplicate removed
+    assert out.count("#[cfg(feature = \"z\")]") == 1
+    assert any(l.strip().startswith("use foo::{") for l in out)
+
+
+def test_plain_multiline_braced_import_deduplication():
+    input_text = """
+use foo::{
+    X,
+    Y,
+};
+use foo::{ X, Y };
+
+fn main() {}
+"""
+    out = streamline_rust_imports_unique(input_text).strip().splitlines()
+    # The braced import should be present only once
+    assert sum(1 for l in out if l.strip().startswith("use foo::{")) == 1

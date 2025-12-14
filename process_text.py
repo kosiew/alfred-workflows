@@ -335,6 +335,103 @@ def streamline_rust_imports_low(text):
     return "\n".join(other_lines + result)
 
 
+def _is_covered_by(prev_key, new_key):
+    prev_cfg, prev_pub, prev_paths = prev_key
+    new_cfg, new_pub, new_paths = new_key
+    if prev_cfg != new_cfg or prev_pub != new_pub:
+        return False
+
+    for new_item in new_paths:
+        covered = False
+        for prev_item in prev_paths:
+            if prev_item == new_item:
+                covered = True
+                break
+            if prev_item.endswith("::*"):
+                prefix = prev_item[:-3]
+                if new_item == prefix or new_item.startswith(prefix + "::"):
+                    covered = True
+                    break
+        if not covered:
+            return False
+    return True
+
+def _canonicalize_import(cfg_attr: str | None, stmt_str: str):
+    """Return a canonical key representing the import's semantics.
+
+    cfg_attr: the cfg attribute string (or None)
+    stmt_str: the stripped import string like 'use foo::bar::{A, B}' or 'use foo::X'
+
+    The key is a tuple: (cfg_norm, is_pub, frozenset(full_paths)) where
+    full_paths are fully-qualified import paths like 'foo::bar::A', or
+    a special wildcard marker 'foo::*' for glob imports.
+    """
+    # Normalize cfg attribute by removing interior whitespace so
+    # variants like '#[cfg(feature = "x")]' and '#[cfg( feature="x" )]'
+    # are treated as equivalent when deduplicating.
+    cfg_norm = re.sub(r"\s+", "", (cfg_attr or "")).strip()
+
+    is_pub = stmt_str.startswith("pub use ")
+    prefix_len = 8 if is_pub else 4
+    import_path = stmt_str[prefix_len:-1].strip()  # drop trailing ';'
+
+    # Wildcard imports remain distinct
+    if import_path.endswith("::*"):
+        return (cfg_norm, is_pub, (import_path,))
+
+    full_paths = set()
+
+    # Braced imports
+    if "{" in import_path:
+        mapping = process_import_with_braces(import_path)
+        for base_path, items in mapping.items():
+            for item in items:
+                if item == 'self':
+                    full_paths.add(base_path)
+                else:
+                    full_paths.add(f"{base_path}::{item}")
+    else:
+        # Simple import: full path is the join of parts
+        parts = [p for p in import_path.split("::") if p]
+        if parts:
+            full_paths.add("::".join(parts))
+
+    return (cfg_norm, is_pub, tuple(sorted(full_paths)))
+
+
+def _collect_import_block(lines: list[str], start_idx: int):
+    """Collects an import statement block starting at start_idx.
+
+    Returns a tuple: (stmt_lines, end_idx, compact_stmt_str)
+    - stmt_lines: list of original lines belonging to the import (preserves original formatting)
+    - end_idx: index of the last line of the import block
+    - compact_stmt_str: a compact single-line representation suitable for canonicalization
+
+    The function handles single-line imports (ending with ';') and
+    multi-line braced imports which end with a line that endswith '};'.
+    """
+    if start_idx >= len(lines):
+        return [], start_idx, ""
+
+    first = lines[start_idx]
+    first_stripped = first.strip()
+
+    # Single-line import
+    if first_stripped.endswith(";"):
+        return [first], start_idx, first_stripped
+
+    # Multi-line braced import
+    stmt_lines = [first]
+    j = start_idx + 1
+    while j < len(lines) and not lines[j].strip().endswith("};"):
+        stmt_lines.append(lines[j])
+        j += 1
+    if j < len(lines):
+        stmt_lines.append(lines[j])
+
+    compact = " ".join([ln.strip() for ln in stmt_lines])
+    return stmt_lines, j, compact
+
 def streamline_rust_imports_unique(text):
     """Ensure there are no duplicate Rust imports in `text`.
 
@@ -353,47 +450,6 @@ def streamline_rust_imports_unique(text):
     # nested braces) are treated as duplicates, while preserving the
     # original formatting and ordering of the first occurrence.
 
-    def _canonicalize_import(cfg_attr: str | None, stmt_str: str):
-        """Return a canonical key representing the import's semantics.
-
-        cfg_attr: the cfg attribute string (or None)
-        stmt_str: the stripped import string like 'use foo::bar::{A, B}' or 'use foo::X'
-
-        The key is a tuple: (cfg_norm, is_pub, frozenset(full_paths)) where
-        full_paths are fully-qualified import paths like 'foo::bar::A', or
-        a special wildcard marker 'foo::*' for glob imports.
-        """
-        # Normalize cfg attribute by removing interior whitespace so
-        # variants like '#[cfg(feature = "x")]' and '#[cfg( feature="x" )]'
-        # are treated as equivalent when deduplicating.
-        cfg_norm = re.sub(r"\s+", "", (cfg_attr or "")).strip()
-
-        is_pub = stmt_str.startswith("pub use ")
-        prefix_len = 8 if is_pub else 4
-        import_path = stmt_str[prefix_len:-1].strip()  # drop trailing ';'
-
-        # Wildcard imports remain distinct
-        if import_path.endswith("::*"):
-            return (cfg_norm, is_pub, (import_path,))
-
-        full_paths = set()
-
-        # Braced imports
-        if "{" in import_path:
-            mapping = process_import_with_braces(import_path)
-            for base_path, items in mapping.items():
-                for item in items:
-                    if item == 'self':
-                        full_paths.add(base_path)
-                    else:
-                        full_paths.add(f"{base_path}::{item}")
-        else:
-            # Simple import: full path is the join of parts
-            parts = [p for p in import_path.split("::") if p]
-            if parts:
-                full_paths.add("::".join(parts))
-
-        return (cfg_norm, is_pub, tuple(sorted(full_paths)))
 
     # We'll scan the original lines and skip imports we've already seen
     lines = text.split("\n")
@@ -401,114 +457,47 @@ def streamline_rust_imports_unique(text):
     # Keep a list of seen canonical entries: (cfg_norm, is_pub, set(full_paths))
     seen_entries: list[tuple[str, bool, set]] = []
 
-    def _is_covered_by(prev_key, new_key):
-        prev_cfg, prev_pub, prev_paths = prev_key
-        new_cfg, new_pub, new_paths = new_key
-        if prev_cfg != new_cfg or prev_pub != new_pub:
-            return False
-
-        for new_item in new_paths:
-            covered = False
-            for prev_item in prev_paths:
-                if prev_item == new_item:
-                    covered = True
-                    break
-                if prev_item.endswith("::*"):
-                    prefix = prev_item[:-3]
-                    if new_item == prefix or new_item.startswith(prefix + "::"):
-                        covered = True
-                        break
-            if not covered:
-                return False
-        return True
-
     i = 0
     while i < len(lines):
         line = lines[i]
         stripped = line.strip()
-
         # Handle cfg-attribute followed by an import
         if stripped.startswith("#[cfg") and i + 1 < len(lines):
             next_line = lines[i + 1]
             next_stripped = next_line.strip()
-            is_pub = next_stripped.startswith("pub use ")
-            is_use = next_stripped.startswith("use ")
-
-            if (is_pub or is_use):
-                # Determine full import statement text (recreate as parser does)
-                if next_stripped.endswith(";"):
-                    full_stmt = next_stripped
-                    stmt_lines = [next_line]
-                    j = i + 1
-                else:
-                    # Multi-line import: collect until a line ending with '};'
-                    stmt_lines = [next_line]
-                    j = i + 2
-                    while j < len(lines) and not lines[j].strip().endswith("};"):
-                        stmt_lines.append(lines[j])
-                        j += 1
-                    if j < len(lines):
-                        stmt_lines.append(lines[j])
-                    # Reconstruct a compact statement string for dedup key
-                    full_stmt = " ".join([ln.strip() for ln in stmt_lines])
+            if next_stripped.startswith("pub use ") or next_stripped.startswith("use "):
+                # collect the import block (single-line or multi-line) after the cfg
+                stmt_lines, j, full_stmt = _collect_import_block(lines, i + 1)
 
                 key = _canonicalize_import(stripped, full_stmt)
-                new_set = set(key[2])
 
                 if not any(_is_covered_by(prev, key) for prev in seen_entries):
                     seen_entries.append((key[0], key[1], set(key[2])))
-                    out_lines.append(line)
+                    out_lines.append(line)  # cfg line
                     out_lines.extend(stmt_lines)
+
                 # Advance i past the cfg + import block
                 i = j + 1
                 continue
 
         # Handle plain use / pub use statements
         if stripped.startswith("pub use ") or stripped.startswith("use "):
-            # single-line
-            if stripped.endswith(";"):
-                stmt_text = stripped
-                key = _canonicalize_import(None, stmt_text)
-                new_set = set(key[2])
+            # collect the import block (single-line or multi-line)
+            stmt_lines, j, stmt_text = _collect_import_block(lines, i)
+            key = _canonicalize_import(None, stmt_text)
 
-                if not any(_is_covered_by(prev, key) for prev in seen_entries):
-                    seen_entries.append((key[0], key[1], set(key[2])))
-                    out_lines.append(line)
-                i += 1
-                continue
-            else:
-                # multi-line braced import
-                stmt_lines = [line]
-                j = i + 1
-                while j < len(lines) and not lines[j].strip().endswith("};"):
-                    stmt_lines.append(lines[j])
-                    j += 1
-                if j < len(lines):
-                    stmt_lines.append(lines[j])
+            if not any(_is_covered_by(prev, key) for prev in seen_entries):
+                seen_entries.append((key[0], key[1], set(key[2])))
+                out_lines.extend(stmt_lines)
 
-                stmt_text = " ".join([ln.strip() for ln in stmt_lines])
-                key = _canonicalize_import(None, stmt_text)
-                new_set = set(key[2])
-
-                if not any(_is_covered_by(prev, key) for prev in seen_entries):
-                    seen_entries.append((key[0], key[1], set(key[2])))
-                    out_lines.extend(stmt_lines)
-
-                i = j + 1
-                continue
+            i = j + 1
+            continue
 
         # Non-import line: preserve
         out_lines.append(line)
         i += 1
 
     return "\n".join(out_lines)
-
-
-
-
-
-
-
 
 def remove_rust_printlns(text):
     """Removes println!("==> ...") statements from Rust code, including multi-line ones."""
