@@ -1016,6 +1016,16 @@ def do():
 
         # Prepare JSON output for Alfred
         output = make_alfred_output(streamlined_text, {MESSAGE: "Streamlined imports copied!", MESSAGE_TITLE: "Success"})
+
+    elif action == "streamline_use_in_rust_unique":
+        # Get input text from Alfred environment variable
+        input_text = os.getenv("entry", "").strip()
+
+        # Streamline the Rust import statements
+        streamlined_text = streamline_rust_imports_unique(input_text)
+
+        # Prepare JSON output for Alfred
+        output = make_alfred_output(streamlined_text, {MESSAGE: "Streamlined imports copied!", MESSAGE_TITLE: "Success"})
         
     elif action == "streamline_use_in_rust_high":
         # Get input text from Alfred environment variable
