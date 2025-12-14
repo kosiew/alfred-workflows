@@ -335,6 +335,102 @@ def streamline_rust_imports_low(text):
     return "\n".join(other_lines + result)
 
 
+def streamline_rust_imports_unique(text):
+    """Ensure there are no duplicate Rust imports in `text`.
+
+    This function parses the existing `use`/`pub use` statements, groups
+    them by base path (deduplicating items using sets) and then
+    regenerates consolidated import statements. The result will contain
+    no duplicate imports while preserving cfg attributes and other non-
+    import lines.
+    """
+    if not text or text.isspace():
+        return text
+
+    # We only want to remove exact duplicate imports (including their
+    # associated cfg attributes) and otherwise preserve the original
+    # ordering and formatting. We'll scan the original lines and skip
+    # imports we've already seen.
+    lines = text.split("\n")
+    out_lines = []
+    seen = set()
+
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+
+        # Handle cfg-attribute followed by an import
+        if stripped.startswith("#[cfg") and i + 1 < len(lines):
+            next_line = lines[i + 1]
+            next_stripped = next_line.strip()
+            is_pub = next_stripped.startswith("pub use ")
+            is_use = next_stripped.startswith("use ")
+
+            if (is_pub or is_use):
+                # Determine full import statement text (recreate as parser does)
+                if next_stripped.endswith(";"):
+                    full_stmt = next_stripped
+                    stmt_lines = [next_line]
+                    j = i + 1
+                else:
+                    # Multi-line import: collect until a line ending with '};'
+                    stmt_lines = [next_line]
+                    j = i + 2
+                    while j < len(lines) and not lines[j].strip().endswith("};"):
+                        stmt_lines.append(lines[j])
+                        j += 1
+                    if j < len(lines):
+                        stmt_lines.append(lines[j])
+                    # Reconstruct a compact statement string for dedup key
+                    full_stmt = " ".join([ln.strip() for ln in stmt_lines])
+
+                key = (stripped, full_stmt)
+                if key not in seen:
+                    seen.add(key)
+                    out_lines.append(line)
+                    out_lines.extend(stmt_lines)
+                # Advance i past the cfg + import block
+                i = j + 1
+                continue
+
+        # Handle plain use / pub use statements
+        if stripped.startswith("pub use ") or stripped.startswith("use "):
+            # single-line
+            if stripped.endswith(";"):
+                full_stmt = stripped
+                key = ("", full_stmt)
+                if key not in seen:
+                    seen.add(key)
+                    out_lines.append(line)
+                i += 1
+                continue
+            else:
+                # multi-line braced import
+                stmt_lines = [line]
+                j = i + 1
+                while j < len(lines) and not lines[j].strip().endswith("};"):
+                    stmt_lines.append(lines[j])
+                    j += 1
+                if j < len(lines):
+                    stmt_lines.append(lines[j])
+
+                full_stmt = " ".join([ln.strip() for ln in stmt_lines])
+                key = ("", full_stmt)
+                if key not in seen:
+                    seen.add(key)
+                    out_lines.extend(stmt_lines)
+
+                i = j + 1
+                continue
+
+        # Non-import line: preserve
+        out_lines.append(line)
+        i += 1
+
+    return "\n".join(out_lines)
+
+
 
 
 
