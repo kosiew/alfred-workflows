@@ -251,7 +251,7 @@ from rust_import_helpers import (
 )
 
 def streamline_rust_imports(text):
-    return streamline_rust_imports_high(text)
+    return streamline_rust_imports_unique(text)
 
 # deprecated this
 # it is neither ..low or ..high
