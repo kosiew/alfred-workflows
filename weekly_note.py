@@ -2,20 +2,13 @@
 # ##filename=weekly_note.py, edited on 02 Mar 2023 Thu 10:06 AM
 
 import sys
-from pathlib import Path
-
 import re
 import json
 import os
 from datetime import date
 import datetime
-SOURCE_DIR = Path("/Users/kosiew/GitHub/python-scripts")
-sys.path.insert(0, str(SOURCE_DIR))
-
-print("AFTER insert sys.path[0:3]:", sys.path[:3], file=sys.stderr)
-print("Expect inserted[0]:", sys.path[0], file=sys.stderr)
-print("alias_llm exists?:", (SOURCE_DIR / "alias_llm.py").exists(), file=sys.stderr)
-import alias_llm as _llm
+from typing import Optional
+import subprocess  # newly added
 
 ITEMS = 'items'
 TITLE = 'title'
@@ -31,6 +24,28 @@ IGNORE_LINK = 'xxx'
 ENTRY = 'entry'
 VAR_LINK = 'var_link'
 GET_CLIPBOARD_AS_LINK = 'ccc'
+
+# Full path to llm executable (aliases won't be available inside subprocess)
+LLM_PATH = "/Users/kosiew/GitHub/llm/.venv/bin/llm"
+
+def _run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
+    kw.setdefault("check", True)
+    kw.setdefault("text", True)
+    kw.setdefault("capture_output", True)
+    return subprocess.run(cmd, **kw)
+
+def _llm(flags: list[str], prompt: str, input_text: Optional[str] = None) -> str:
+    """Call llm CLI tool with the given flags and prompt.
+    
+    Returns the stdout output, or raises an exception if the command fails.
+    Note: Uses full path to llm since subprocess doesn't expand shell aliases.
+    """
+    try:
+        # Use the module-level LLM_PATH constant
+        proc = _run([LLM_PATH, *flags, prompt], input=input_text)
+        return proc.stdout or ""
+    except Exception:
+        return "llm failed"
 
 def output_json(a_dict):
     sys.stdout.write(json.dumps(a_dict))
@@ -86,7 +101,7 @@ def copy_file_to(from_file, to_file):
 
 
 def get_last_line_date():
-    pattern = '(?P<prefix>ts\[)(?P<date>\S+)'
+    pattern = r'(?P<prefix>ts\[)(?P<date>\S+)'
 
     lines = []
     with open(os.path.expanduser(NOTEBOOK), 'r') as file:
@@ -160,10 +175,14 @@ def do():
         entry = os.getenv('entry')
         message_title, message, var_link, modified_entry = get_var_link(link, entry)
         prompt = (
-            "Generate a concise summary of the following journal entry."
-            "Ensure it captures the main theme of the entry."
+            "Generate a succinct summary of the following entry."
+            "Ensure it captures the main theme"
         )
-        summary = _llm.process(prompt, modified_entry)
+        summary = _llm([], prompt, input_text=modified_entry)
+        modified_entry = (
+            "\n" + modified_entry.strip() + "\n\n" +
+            summary + "\n"
+        )
         # result appears in Alfred debug and is useful for debugging
         result = var_link
         # entry = os.getenv('entry')
@@ -171,7 +190,7 @@ def do():
             ARG: result,
             VARIABLES: {MESSAGE: message,
                         MESSAGE_TITLE: message_title,
-                        ENTRY: f"modified_entry/n summary:{summary}/n",
+                        ENTRY: modified_entry,
                         VAR_LINK: var_link
                         }}}
         output_json(output)
