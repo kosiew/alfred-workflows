@@ -3,24 +3,19 @@
 
 import sys
 from pathlib import Path
-print("BEFORE insert sys.path[0:3]:", sys.path[:3], file=sys.stderr)
 
-SOURCE_DIR = Path("/Users/kosiew/GitHub/python-scripts")
-
-sys.path.insert(0, str(SOURCE_DIR))
-
-print("AFTER insert sys.path[0:3]:", sys.path[:3], file=sys.stderr)
-print("Expect inserted[0]:", sys.path[0], file=sys.stderr)
-print("alias_llm exists?:", (SOURCE_DIR / "alias_llm.py").exists(), file=sys.stderr)
 import re
 import json
 import os
 from datetime import date
 import datetime
-
-import alias_llm as _llm
-
+SOURCE_DIR = Path("/Users/kosiew/GitHub/python-scripts")
 sys.path.insert(0, str(SOURCE_DIR))
+
+print("AFTER insert sys.path[0:3]:", sys.path[:3], file=sys.stderr)
+print("Expect inserted[0]:", sys.path[0], file=sys.stderr)
+print("alias_llm exists?:", (SOURCE_DIR / "alias_llm.py").exists(), file=sys.stderr)
+import alias_llm as _llm
 
 ITEMS = 'items'
 TITLE = 'title'
