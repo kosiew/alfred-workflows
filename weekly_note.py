@@ -2,11 +2,25 @@
 # ##filename=weekly_note.py, edited on 02 Mar 2023 Thu 10:06 AM
 
 import sys
+from pathlib import Path
+print("BEFORE insert sys.path[0:3]:", sys.path[:3], file=sys.stderr)
+
+SOURCE_DIR = Path("/Users/kosiew/GitHub/python-scripts")
+
+sys.path.insert(0, str(SOURCE_DIR))
+
+print("AFTER insert sys.path[0:3]:", sys.path[:3], file=sys.stderr)
+print("Expect inserted[0]:", sys.path[0], file=sys.stderr)
+print("alias_llm exists?:", (SOURCE_DIR / "alias_llm.py").exists(), file=sys.stderr)
 import re
 import json
 import os
 from datetime import date
 import datetime
+
+import alias_llm as _llm
+
+sys.path.insert(0, str(SOURCE_DIR))
 
 ITEMS = 'items'
 TITLE = 'title'
@@ -150,6 +164,11 @@ def do():
         link = sys.argv[2]
         entry = os.getenv('entry')
         message_title, message, var_link, modified_entry = get_var_link(link, entry)
+        prompt = (
+            "Generate a concise summary of the following journal entry."
+            "Ensure it captures the main theme of the entry."
+        )
+        summary = _llm.process(prompt, modified_entry)
         # result appears in Alfred debug and is useful for debugging
         result = var_link
         # entry = os.getenv('entry')
@@ -157,7 +176,7 @@ def do():
             ARG: result,
             VARIABLES: {MESSAGE: message,
                         MESSAGE_TITLE: message_title,
-                        ENTRY: modified_entry,
+                        ENTRY: f"modified_entry/n summary:{summary}/n",
                         VAR_LINK: var_link
                         }}}
         output_json(output)
