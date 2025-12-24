@@ -43,7 +43,7 @@ def _llm(flags: list[str], prompt: str, input_text: Optional[str] = None) -> str
     try:
         # Use the module-level LLM_PATH constant
         proc = _run([LLM_PATH, *flags, prompt], input=input_text)
-        return proc.stdout or ""
+        return proc.stdout.strip() or ""
     except Exception:
         return "llm failed"
 
@@ -56,7 +56,7 @@ def remove_href_li(link):
 def get_var_link(link, entry):
     message = ''
     var_link = ''
-    modified_entry = entry
+    modified_entry = entry.strip()
 
     if entry.endswith(IGNORE_LINK):
         message_title = 'Ignoring clipboard'
@@ -69,7 +69,7 @@ def get_var_link(link, entry):
     else:
         if link.startswith('http'):
             link = remove_href_li(link)
-            var_link = '[&&]({0})'.format(link)
+            var_link = f'[&&]({link})'
             message = link
             message_title = f'Using {link}'
         else:
@@ -171,7 +171,7 @@ def do():
         output_json(output)
     elif action == 'get_var_link':
         mark_new_date()
-        link = sys.argv[2]
+        link = os.getenv('link')
         entry = os.getenv('entry')
         summarize = os.getenv('summary', 'N')
         message_title, message, var_link, modified_entry = get_var_link(link, entry)
@@ -181,7 +181,9 @@ def do():
                 "Ensure it captures the main theme"
             )
             summary = _llm([], prompt, input_text=modified_entry)
-            modified_entry = "\n" + modified_entry.strip() + "\n\n" + summary + "\n"
+            modified_entry = f"{modified_entry}\n\n{summary}"
+        else:
+            modified_entry = f"{modified_entry}"
         # result appears in Alfred debug and is useful for debugging
         result = var_link
         # entry = os.getenv('entry')
