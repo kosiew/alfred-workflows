@@ -902,23 +902,43 @@ def diff_hunk_to_file_line(input_text: str) -> str:
 def rewrite_github_blob_for_pr_branch(url: str, pr_branch: str) -> str:
     """Rewrite a GitHub blob/tree URL to use the owner and branch from pr_branch.
 
-    pr_branch is expected in the form 'owner:branch'. If owner is omitted
-    (no ':' found), only the branch will be replaced. The function supports
-    both 'blob' and 'tree' URL segments and preserves the rest of the path
-    and any fragment (e.g. line anchors).
+    pr_branch can be:
+    - 'owner:branch' format
+    - A full GitHub URL like 'https://github.com/owner/repo/tree/branch'
+    - A commit URL like 'https://github.com/owner/repo/commit/sha'
+    
+    The function supports both 'blob' and 'tree' URL segments and preserves 
+    the rest of the path and any fragment (e.g. line anchors).
 
     Examples:
         url = 'https://github.com/kosiew/datafusion/blob/test/path/file.rs#L1'
         pr_branch = 'Jefffrey:acc_args_input_fields'
         -> 'https://github.com/Jefffrey/datafusion/blob/acc_args_input_fields/path/file.rs#L1'
+        
+        pr_branch = 'https://github.com/apache/datafusion/tree/10db6b3712af7e29af66d541297f67a360127bd3'
+        url = 'https://github.com/apache/datafusion/blob/main/datafusion/core/Cargo.toml#L6'
+        -> 'https://github.com/apache/datafusion/blob/10db6b3712af7e29af66d541297f67a360127bd3/datafusion/core/Cargo.toml#L6'
+        
+        pr_branch = 'https://github.com/apache/datafusion/commit/10db6b3712af7e29af66d541297f67a360127bd3'
+        url = 'https://github.com/apache/datafusion/blob/main/datafusion/core/Cargo.toml#L6'
+        -> 'https://github.com/apache/datafusion/blob/10db6b3712af7e29af66d541297f67a360127bd3/datafusion/core/Cargo.toml#L6'
     """
     if not url:
         return url
 
-    # Parse pr_branch into owner and branch
+    # Parse pr_branch: can be 'owner:branch', a blob/tree URL, or a commit URL
     owner = None
     branch = pr_branch or ""
-    if pr_branch and ":" in pr_branch:
+    
+    # Check if pr_branch is a GitHub URL
+    if pr_branch and pr_branch.startswith("https://github.com/"):
+        # Try to extract owner and branch/commit from blob/tree/commit URLs
+        m = re.match(r"^https://github\.com/([^/]+)/[^/]+/(blob|tree|commit)/([^/]+)", pr_branch)
+        if m:
+            owner = m.group(1)
+            branch = m.group(3)
+    elif pr_branch and ":" in pr_branch:
+        # Traditional 'owner:branch' format
         owner, branch = pr_branch.split(":", 1)
 
     # Regex to capture: scheme+host, owner, repo, (blob|tree), branch, optional path, optional fragment
