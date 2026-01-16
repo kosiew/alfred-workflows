@@ -787,8 +787,14 @@ def generate_commit_range_from_clip(clip_content: str):
     # Newest is first appearance, oldest is last
     end_sha = ordered_shas[0]
     start_sha = ordered_shas[-1]
+    ordered_shas_string = " ".join(ordered_shas)
 
-    return make_alfred_output(f"{start_sha}..{end_sha}", {MESSAGE: "Commit range prepared", MESSAGE_TITLE: "Success", "start": start_sha, "end": end_sha})
+    return make_alfred_output(f"{start_sha}..{end_sha}", 
+                              {MESSAGE: "Commit range prepared", 
+                               MESSAGE_TITLE: "Success", 
+                               "start": start_sha, 
+                               "end": end_sha, 
+                               "hashes": ordered_shas_string})
 
 
 def generate_branch_name_from_clip(clip_content: str):
