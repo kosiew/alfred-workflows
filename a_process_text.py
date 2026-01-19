@@ -8,6 +8,11 @@ import time  # newly added
 import html2text  # for HTML to markdown conversion
 from python_import_helpers import parse_python_import_statements, generate_python_import_statements
 from typing import Optional
+from pathlib import Path
+
+SOURCE_DIR = Path("/Users/kosiew/GitHub/python-scripts")
+sys.path.insert(0, str(SOURCE_DIR))
+import alias_git as _git
 
 # Full path to llm executable (aliases won't be available inside subprocess)
 LLM_PATH = "/Users/kosiew/GitHub/llm/.venv/bin/llm"
@@ -905,66 +910,7 @@ def diff_hunk_to_file_line(input_text: str) -> str:
     return f"{path}:1"
 
 
-def rewrite_github_blob_for_pr_branch(url: str, pr_branch: str) -> str:
-    """Rewrite a GitHub blob/tree URL to use the owner and branch from pr_branch.
 
-    pr_branch can be:
-    - 'owner:branch' format
-    - A full GitHub URL like 'https://github.com/owner/repo/tree/branch'
-    - A commit URL like 'https://github.com/owner/repo/commit/sha'
-    
-    The function supports both 'blob' and 'tree' URL segments and preserves 
-    the rest of the path and any fragment (e.g. line anchors).
-
-    Examples:
-        url = 'https://github.com/kosiew/datafusion/blob/test/path/file.rs#L1'
-        pr_branch = 'Jefffrey:acc_args_input_fields'
-        -> 'https://github.com/Jefffrey/datafusion/blob/acc_args_input_fields/path/file.rs#L1'
-        
-        pr_branch = 'https://github.com/apache/datafusion/tree/10db6b3712af7e29af66d541297f67a360127bd3'
-        url = 'https://github.com/apache/datafusion/blob/main/datafusion/core/Cargo.toml#L6'
-        -> 'https://github.com/apache/datafusion/blob/10db6b3712af7e29af66d541297f67a360127bd3/datafusion/core/Cargo.toml#L6'
-        
-        pr_branch = 'https://github.com/apache/datafusion/commit/10db6b3712af7e29af66d541297f67a360127bd3'
-        url = 'https://github.com/apache/datafusion/blob/main/datafusion/core/Cargo.toml#L6'
-        -> 'https://github.com/apache/datafusion/blob/10db6b3712af7e29af66d541297f67a360127bd3/datafusion/core/Cargo.toml#L6'
-    """
-    if not url:
-        return url
-
-    # Parse pr_branch: can be 'owner:branch', a blob/tree URL, or a commit URL
-    owner = None
-    branch = pr_branch or ""
-    
-    # Check if pr_branch is a GitHub URL
-    if pr_branch and pr_branch.startswith("https://github.com/"):
-        # Try to extract owner and branch/commit from blob/tree/commit URLs
-        m = re.match(r"^https://github\.com/([^/]+)/[^/]+/(blob|tree|commit)/([^/]+)", pr_branch)
-        if m:
-            owner = m.group(1)
-            branch = m.group(3)
-    elif pr_branch and ":" in pr_branch:
-        # Traditional 'owner:branch' format
-        owner, branch = pr_branch.split(":", 1)
-
-    # Regex to capture: scheme+host, owner, repo, (blob|tree), branch, optional path, optional fragment
-    m = re.match(r"^(https://github\.com/)([^/]+)/([^/]+)/(blob|tree)/([^/]+)(/[^#]*)?(#.*)?$", url)
-    if not m:
-        # Not a recognized GitHub blob/tree URL; return original
-        return url
-
-    scheme_host = m.group(1)
-    orig_owner = m.group(2)
-    repo = m.group(3)
-    kind = m.group(4)
-    _orig_branch = m.group(5)
-    path = m.group(6) or ""
-    fragment = m.group(7) or ""
-
-    new_owner = owner if owner else orig_owner
-    new_branch = branch if branch else _orig_branch
-
-    return f"{scheme_host}{new_owner}/{repo}/{kind}/{new_branch}{path}{fragment}"
 
 
 def open_clipboard_vscode_link(clip_content: str):
@@ -1210,7 +1156,7 @@ def do():
         pr_branch = os.getenv("pr_branch", "").strip()
 
         # Perform rewrite
-        rewritten = rewrite_github_blob_for_pr_branch(input_url, pr_branch)
+        rewritten = _git.rewrite_github_blob_for_pr_branch(input_url, pr_branch)
 
         # Prepare JSON output for Alfred
         output = make_alfred_output(rewritten, {MESSAGE: "URL rewritten", MESSAGE_TITLE: "Success"})
