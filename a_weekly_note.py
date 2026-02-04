@@ -174,7 +174,10 @@ def do():
         link = os.getenv('link')
         entry = os.getenv('entry')
         summarize = os.getenv('summary', 'N')
+        ignore_link = os.getenv('ignore_link', 'N')
         message_title, message, var_link, modified_entry = get_var_link(link, entry)
+        if ignore_link == 'Y':
+            var_link = ''
         if summarize == 'Y':
             prompt = (
                 "Generate a succinct summary of the following entry."
