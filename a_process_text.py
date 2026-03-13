@@ -632,6 +632,47 @@ def split_text_at_string(input_text, search_string):
     return pre, post
 
 
+def amend_markdown_file_links(input_text: str) -> str:
+    """Rewrite markdown bullet file links to `path::line` format.
+
+    Example input line:
+    - [datafusion/common/src/scalar/mod.rs](/Users/.../mod.rs#L3907)
+
+    Example output line:
+    datafusion/common/src/scalar/mod.rs::3907
+    """
+    if not input_text:
+        return input_text
+
+    bullet_link_re = re.compile(r"^\s*[-*]\s*\[([^\]]+)\]\(([^)]+)\)\s*$")
+    out_lines = []
+
+    for line in input_text.splitlines():
+        m = bullet_link_re.match(line)
+        if not m:
+            out_lines.append(line)
+            continue
+
+        display_path = m.group(1).strip()
+        target = m.group(2).strip()
+
+        line_no = None
+        m_hash_line = re.search(r"#L(\d+)\b", target)
+        if m_hash_line:
+            line_no = m_hash_line.group(1)
+        else:
+            m_colon_line = re.search(r":(\d+)(?::\d+)?$", target)
+            if m_colon_line:
+                line_no = m_colon_line.group(1)
+
+        if line_no:
+            out_lines.append(f"{display_path}:{line_no}")
+        else:
+            out_lines.append(display_path)
+
+    return "\n".join(out_lines)
+
+
 def check_string_match(input_text, search_string):
     """
     Check if search string exists in input text.
@@ -1175,6 +1216,19 @@ def do():
         clip_content = os.getenv("entry", "").strip()
         # Extract VS Code link and open it
         output = open_clipboard_vscode_link(clip_content)
+
+    elif action == "amend_markdown_file_links":
+        # Get clipboard content from Alfred environment variable
+        clip_content = os.getenv("entry", "").strip()
+
+        # Rewrite markdown links as path::line format
+        amended_text = amend_markdown_file_links(clip_content)
+
+        # Prepare JSON output for Alfred
+        output = make_alfred_output(
+            amended_text,
+            {MESSAGE: "Links amended and copied!", MESSAGE_TITLE: "Success"},
+        )
 
     
     output_json(output)
