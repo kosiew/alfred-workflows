@@ -644,7 +644,8 @@ def amend_markdown_file_links(input_text: str) -> str:
     if not input_text:
         return input_text
 
-    bullet_link_re = re.compile(r"^\s*[-*]\s*\[([^\]]+)\]\(([^)]+)\)\s*$")
+    # Allow an optional trailing ':' after the markdown link (e.g. '...#L1169):')
+    bullet_link_re = re.compile(r"^\s*[-*]\s*\[([^\]]+)\]\(([^)]+)\)\s*:?")
     out_lines = []
 
     for line in input_text.splitlines():
@@ -654,7 +655,7 @@ def amend_markdown_file_links(input_text: str) -> str:
             continue
 
         display_path = m.group(1).strip()
-        target = m.group(2).strip()
+        target = m.group(2).strip().rstrip(":")
 
         line_no = None
         m_hash_line = re.search(r"#L(\d+)\b", target)
