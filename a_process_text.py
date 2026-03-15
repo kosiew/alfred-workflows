@@ -786,6 +786,7 @@ def generate_commit_message_from_clip(clip_content: str):
         f"Use imperative mood, max 50 chars for subject, blank line, "
         f"then a short body wrapped at ~72 chars. Do not include code fences.\n\n"
     )
+    timestamp = time.strftime("%H:%M %d-%b")
 
     try:
         llm_output = _llm([], full_prompt, input_text=f"Changes:\n{clip_content}")
@@ -796,15 +797,14 @@ def generate_commit_message_from_clip(clip_content: str):
         commit_msg = _unwrap_fenced(llm_output).strip()
 
         if not commit_msg:
-            return make_alfred_output("", {MESSAGE: "LLM returned empty commit message", MESSAGE_TITLE: "Error"})
+            return make_alfred_output("", {MESSAGE: "LLM returned empty commit message", MESSAGE_TITLE: timestamp})
 
-        timestamp = time.strftime("%H:%M %d-%b")
         return make_alfred_output(
             commit_msg,
-            {MESSAGE: f"Commit message generated! ({timestamp})", MESSAGE_TITLE: "Success"},
+            {MESSAGE: f"Commit message generated", MESSAGE_TITLE: timestamp},
         )
     except Exception as e:
-        return make_alfred_output("", {MESSAGE: f"LLM generation failed: {str(e)}", MESSAGE_TITLE: "Error"})
+        return make_alfred_output("", {MESSAGE: f"LLM generation failed: {str(e)}", MESSAGE_TITLE: timestamp})
 
 
 def generate_commit_range_from_clip(clip_content: str):
