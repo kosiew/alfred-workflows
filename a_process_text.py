@@ -798,7 +798,11 @@ def generate_commit_message_from_clip(clip_content: str):
         if not commit_msg:
             return make_alfred_output("", {MESSAGE: "LLM returned empty commit message", MESSAGE_TITLE: "Error"})
 
-        return make_alfred_output(commit_msg, {MESSAGE: "Commit message generated!", MESSAGE_TITLE: "Success"})
+        timestamp = time.strftime("%H:%M %d-%b")
+        return make_alfred_output(
+            commit_msg,
+            {MESSAGE: f"Commit message generated! ({timestamp})", MESSAGE_TITLE: "Success"},
+        )
     except Exception as e:
         return make_alfred_output("", {MESSAGE: f"LLM generation failed: {str(e)}", MESSAGE_TITLE: "Error"})
 
