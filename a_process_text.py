@@ -786,7 +786,7 @@ def generate_commit_message_from_clip(clip_content: str):
         f"Use imperative mood, max 50 chars for subject, blank line, "
         f"then a short body wrapped at ~72 chars. Do not include code fences.\n\n"
     )
-    timestamp = time.strftime("%H:%M %d-%b")
+    timestamp = time.strftime("%d-%b, %I:%M %p")
 
     try:
         llm_output = _llm([], full_prompt, input_text=f"Changes:\n{clip_content}")
