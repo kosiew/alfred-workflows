@@ -732,6 +732,14 @@ def remove_spaces(text):
     return text.replace(" ", "")
 
 
+def convert_literal_newlines(text):
+    """Converts literal '\\n' sequences into actual newline characters."""
+    if not text:
+        return text
+
+    return text.replace("\\n", "\n")
+
+
 def html_to_markdown(html_content):
     """Converts HTML content to markdown format."""
     try:
@@ -819,10 +827,24 @@ def generate_commit_range_from_clip(clip_content: str):
     if not clip_content:
         return make_alfred_output("", {MESSAGE: "Clipboard is empty", MESSAGE_TITLE: "Error"})
 
-    # Regex to find commit SHAs (7 to 40 hex chars) at the start of a line or after a pipe/symbol
-    sha_regex = re.compile(r"\b([0-9a-f]{7,40})\b", re.IGNORECASE)
+    # Prefer SHAs found at the beginning of each line (typical `git log` style).
+    # This avoids false positives from numeric suffixes in commit subjects,
+    # e.g. "... 2603201726" which are not commit hashes.
+    shas = []
+    line_sha_regex = re.compile(r"^\s*([0-9a-f]{7,40})\b(?:\s+-|\s|$)", re.IGNORECASE)
+    for line in clip_content.splitlines():
+        m = line_sha_regex.match(line)
+        if m:
+            shas.append(m.group(1))
 
-    shas = sha_regex.findall(clip_content)
+    # Fallback for loose clipboard formats: extract hex-like tokens, but skip
+    # long all-digit numbers which are commonly timestamps/IDs rather than SHAs.
+    if not shas:
+        loose_sha_regex = re.compile(r"\b([0-9a-f]{7,40})\b", re.IGNORECASE)
+        for token in loose_sha_regex.findall(clip_content):
+            if re.fullmatch(r"\d{9,}", token):
+                continue
+            shas.append(token)
 
     # Deduplicate while preserving order
     seen = set()
@@ -1178,6 +1200,16 @@ def do():
 
         # Prepare JSON output for Alfred
         output = make_alfred_output(processed_text, {MESSAGE: "Spaces removed!", MESSAGE_TITLE: "Success"})
+
+    elif action == "convert_literal_newlines":
+        # Get input text from Alfred environment variable
+        input_text = os.getenv("entry", "")
+
+        # Convert literal \n sequences into actual newline characters
+        processed_text = convert_literal_newlines(input_text)
+
+        # Prepare JSON output for Alfred
+        output = make_alfred_output(processed_text, {MESSAGE: "Newlines converted!", MESSAGE_TITLE: "Success"})
 
     elif action == "clip_to_commit":
         # Get clipboard content from Alfred environment variable
