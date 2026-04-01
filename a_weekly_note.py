@@ -133,17 +133,96 @@ def get_today(return_year_month_day = True):
         return get_year_month_day(today)
     return today
 
-def write_new_date_marker(today, file_path = os.path.expanduser(NOTEBOOK), prefix = ''):
+def write_new_date_marker(today, file_path=None, prefix=''):
+    if file_path:
+        target_path = os.path.expanduser(file_path)
+    elif NOTEBOOK:
+        target_path = os.path.expanduser(NOTEBOOK)
+    else:
+        raise ValueError('NOTEBOOK path is not set')
     today_string = today.strftime('%Y-%m-%d %a')
     line = f'\n\n{prefix} {today_string}\n'
-    with open(file_path, 'a+') as file:
+    with open(target_path, 'a+') as file:
         file.write(line)
 
-def mark_new_date(file_path = os.path.expanduser(NOTEBOOK)):
+def mark_new_date(file_path=None):
     last_line_date = get_last_line_date()
     today = get_today(False)
     if last_line_date != get_year_month_day(today):
         write_new_date_marker(today, file_path)
+
+
+BOOK_ORDER = [
+    'Genesis', 'Exodus', 'Leviticus', 'Numbers', 'Deuteronomy',
+    'Joshua', 'Judges', 'Ruth', '1 Samuel', '2 Samuel',
+    '1 Kings', '2 Kings', '1 Chronicles', '2 Chronicles', 'Ezra',
+    'Nehemiah', 'Esther', 'Job', 'Psalm', 'Proverbs',
+    'Ecclesiastes', 'Song of Solomon', 'Isaiah', 'Jeremiah',
+    'Lamentations', 'Ezekiel', 'Daniel', 'Hosea', 'Joel',
+    'Amos', 'Obadiah', 'Jonah', 'Micah', 'Nahum',
+    'Habakkuk', 'Zephaniah', 'Haggai', 'Zechariah', 'Malachi',
+    'Matthew', 'Mark', 'Luke', 'John', 'Acts',
+    'Romans', '1 Corinthians', '2 Corinthians', 'Galatians', 'Ephesians',
+    'Philippians', 'Colossians', '1 Thessalonians', '2 Thessalonians',
+    '1 Timothy', '2 Timothy', 'Titus', 'Philemon', 'Hebrews',
+    'James', '1 Peter', '2 Peter', '1 John', '2 John',
+    '3 John', 'Jude', 'Revelation'
+]
+
+BOOK_INDEX = {re.sub(r'[\s\.]+', ' ', b.strip().lower()): i for i, b in enumerate(BOOK_ORDER)}
+
+
+def normalize_book_name(book):
+    book = book.strip().lower().replace('.', '')
+    book = re.sub(r'\s+', ' ', book)
+    book = book.replace('first ', '1 ').replace('second ', '2 ').replace('third ', '3 ')
+    book = book.replace('1st ', '1 ').replace('2nd ', '2 ').replace('3rd ', '3 ')
+    if book in ('songs of solomon', 'song of songs'):
+        book = 'song of solomon'
+    if book == 'psalms':
+        book = 'psalm'
+    return book
+
+
+def get_book_index(book):
+    normalized = normalize_book_name(book)
+    return BOOK_INDEX.get(normalized, 999)
+
+
+def parse_bible_reference(ref_line):
+    ref_line = ref_line.strip()
+    # Expected format: Book Chapter:Verse
+    m = re.match(r'^(?P<book>(?:\d+\s)?[A-Za-z][A-Za-z\s]*)\s+(?P<chapter>\d+):(?P<verse>\d+)$', ref_line)
+    if not m:
+        return None
+    book = m.group('book')
+    try:
+        chapter = int(m.group('chapter'))
+        verse = int(m.group('verse'))
+    except ValueError:
+        return None
+    return book, chapter, verse
+
+
+def sort_bible_verse_blocks(text):
+    blocks = [b.strip() for b in re.split(r'\n\s*\n', text.strip(), flags=re.MULTILINE) if b.strip()]
+    sorted_blocks = []
+
+    for idx, block in enumerate(blocks):
+        lines = block.splitlines()
+        if not lines:
+            continue
+        parsed = parse_bible_reference(lines[0])
+        if parsed:
+            book, chapter, verse = parsed
+            bidx = get_book_index(book)
+            key = (bidx, chapter, verse, idx)
+        else:
+            key = (999, 0, 0, idx)
+        sorted_blocks.append((key, block))
+
+    sorted_blocks.sort(key=lambda x: x[0])
+    return '\n\n'.join(block for _, block in sorted_blocks) + ('\n' if sorted_blocks else '')
 
 
 def do():
@@ -196,6 +275,34 @@ def do():
                         MESSAGE_TITLE: message_title,
                         ENTRY: modified_entry,
                         VAR_LINK: var_link
+                        }}}
+        output_json(output)
+    elif action == 'sort_bible_verses':
+        journal_path = os.getenv('bible_verse_journal')
+        if not journal_path:
+            result = 'Error: bible_verse_journal not set'
+            message_title = 'Missing env var'
+            message = 'Please set bible_verse_journal to your journal file path.'
+        else:
+            journal_file = os.path.expanduser(journal_path)
+            try:
+                with open(journal_file, 'r') as file:
+                    raw = file.read()
+                sorted_text = sort_bible_verse_blocks(raw)
+                with open(journal_file, 'w') as file:
+                    file.write(sorted_text)
+                result = 'Sorted bible verses'
+                message_title = 'Sorted bible journal'
+                message = f'Successfully sorted {journal_file}'
+            except Exception as e:
+                result = 'Error'
+                message_title = 'Sort failed'
+                message = str(e)
+
+        output = {ALFREDWORKFLOW: {
+            ARG: result,
+            VARIABLES: {MESSAGE: message,
+                        MESSAGE_TITLE: message_title
                         }}}
         output_json(output)
 
