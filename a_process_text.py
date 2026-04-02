@@ -1054,6 +1054,7 @@ def do():
     """Main function to handle Alfred workflow input and output."""
     action = sys.argv[1]
     output = {}
+    time_stamp = _current_message_title_timestamp()
     if action == "new_dictionary_entry":
         # Get input text from Alfred environment variable
         input_text = os.getenv("entry", "").strip()
@@ -1062,7 +1063,7 @@ def do():
         word, meaning = process_text(input_text)
 
         # Prepare JSON output for Alfred
-        output = make_alfred_output(word, {MESSAGE: "Transformed text copied!", MESSAGE_TITLE: _current_message_title_timestamp(), WORD: word, MEANING: meaning})
+        output = make_alfred_output(word, {MESSAGE: "Transformed text copied!", MESSAGE_TITLE: time_stamp, WORD: word, MEANING: meaning})
 
     if action == "parse_whatsapp_number":
         # Get input text from Alfred environment variable
@@ -1075,7 +1076,7 @@ def do():
             phone_number = "+6" + phone_number
 
         # Prepare JSON output for Alfred
-        output = make_alfred_output(phone_number, {MESSAGE: "Phone number copied!", MESSAGE_TITLE: phone_number, WHATSAPP_NUMBER: phone_number})
+        output = make_alfred_output(phone_number, {MESSAGE: f"Phone number {phone_number} copied!", MESSAGE_TITLE: time_stamp, WHATSAPP_NUMBER: phone_number})
 
     elif action == "streamline_use_in_rust":
         # Get input text from Alfred environment variable
@@ -1085,7 +1086,7 @@ def do():
         streamlined_text = streamline_rust_imports(input_text)
 
         # Prepare JSON output for Alfred
-        output = make_alfred_output(streamlined_text, {MESSAGE: "Streamlined imports copied!", MESSAGE_TITLE: _current_message_title_timestamp()})
+        output = make_alfred_output(streamlined_text, {MESSAGE: "Streamlined imports copied!", MESSAGE_TITLE: time_stamp})
 
     elif action == "streamline_use_in_rust_unique":
         # Get input text from Alfred environment variable
@@ -1095,7 +1096,7 @@ def do():
         streamlined_text = streamline_rust_imports_unique(input_text)
 
         # Prepare JSON output for Alfred
-        output = make_alfred_output(streamlined_text, {MESSAGE: "Streamlined imports copied!", MESSAGE_TITLE: _current_message_title_timestamp()})
+        output = make_alfred_output(streamlined_text, {MESSAGE: "Streamlined imports copied!", MESSAGE_TITLE: time_stamp})
         
     elif action == "streamline_use_in_rust_high":
         # Get input text from Alfred environment variable
@@ -1105,7 +1106,7 @@ def do():
         streamlined_text = streamline_rust_imports_high(input_text)
 
         # Prepare JSON output for Alfred
-        output = make_alfred_output(streamlined_text, {MESSAGE: "Streamlined imports copied!", MESSAGE_TITLE: _current_message_title_timestamp()})
+        output = make_alfred_output(streamlined_text, {MESSAGE: "Streamlined imports copied!", MESSAGE_TITLE: time_stamp})
         
     elif action == "streamline_use_in_rust_low":
         # Get input text from Alfred environment variable
@@ -1115,7 +1116,7 @@ def do():
         streamlined_text = streamline_rust_imports_low(input_text)
 
         # Prepare JSON output for Alfred
-        output = make_alfred_output(streamlined_text, {MESSAGE: "Streamlined imports copied!", MESSAGE_TITLE: _current_message_title_timestamp()})
+        output = make_alfred_output(streamlined_text, {MESSAGE: "Streamlined imports copied!", MESSAGE_TITLE: time_stamp})
 
     elif action == "streamline_import_in_python":
         # Get input text from Alfred environment variable
@@ -1125,7 +1126,7 @@ def do():
         streamlined_text = streamline_python_imports(input_text)
 
         # Prepare JSON output for Alfred
-        output = make_alfred_output(streamlined_text, {MESSAGE: "Streamlined imports copied!", MESSAGE_TITLE: _current_message_title_timestamp()})
+        output = make_alfred_output(streamlined_text, {MESSAGE: "Streamlined imports copied!", MESSAGE_TITLE: time_stamp})
 
     elif action == "remove_println_in_rust":
         # Get input text from Alfred environment variable
@@ -1135,7 +1136,7 @@ def do():
         filtered_text = remove_rust_printlns(input_text)
 
         # Prepare JSON output for Alfred
-        output = make_alfred_output(filtered_text, {MESSAGE: "Debug printlns removed!", MESSAGE_TITLE: _current_message_title_timestamp()})
+        output = make_alfred_output(filtered_text, {MESSAGE: "Debug printlns removed!", MESSAGE_TITLE: time_stamp})
 
     elif action == "remove_print_in_python":
         # Get input text from Alfred environment variable
@@ -1145,7 +1146,7 @@ def do():
         filtered_text = remove_python_prints(input_text)
 
         # Prepare JSON output for Alfred
-        output = make_alfred_output(filtered_text, {MESSAGE: "Debug prints removed!", MESSAGE_TITLE: _current_message_title_timestamp()})
+        output = make_alfred_output(filtered_text, {MESSAGE: "Debug prints removed!", MESSAGE_TITLE: time_stamp})
 
     elif action == "remove_metadata":
         # Get image path from Alfred environment variable
@@ -1155,7 +1156,7 @@ def do():
         success, message = strip_metadata(image_path)
 
         # Prepare JSON output for Alfred
-        output = make_alfred_output(image_path if success else message, {MESSAGE: message, MESSAGE_TITLE: "Success" if success else "Error"})
+        output = make_alfred_output(image_path if success else message, {MESSAGE: message, MESSAGE_TITLE: time_stamp if success else "Error"})
 
     elif action == "rename_dalle_file":  # newly added action branch= "__main__":
         output = rename_dalle_files()
@@ -1168,7 +1169,7 @@ def do():
         result = check_string_match(input_text, search_string)
 
         # Prepare JSON output for Alfred
-        output = make_alfred_output(result, {MESSAGE: f"{result} - '{search_string}' in input", MESSAGE_TITLE: "Check String Match"})
+        output = make_alfred_output(result, {MESSAGE: f"{result} - '{search_string}' in input", MESSAGE_TITLE: time_stamp})
         
     elif action == "substitute_search_string":
         # Get input text and search string from Alfred environment variables
@@ -1180,7 +1181,7 @@ def do():
         result_text = input_text.replace(search_string, replace_with)
 
         # Prepare JSON output for Alfred
-        output = make_alfred_output(result_text, {MESSAGE: f"Replaced '{search_string}' with '{replace_with}'", MESSAGE_TITLE: "String Substitution"})
+        output = make_alfred_output(result_text, {MESSAGE: f"Replaced '{search_string}' with '{replace_with}'", MESSAGE_TITLE: time_stamp})
 
     elif action == "remove_plus_prefix":
         # Get input text from Alfred environment variable
@@ -1190,7 +1191,7 @@ def do():
         filtered_text = remove_plus_prefix(input_text)
 
         # Prepare JSON output for Alfred
-        output = make_alfred_output(filtered_text, {MESSAGE: "Plus/minus prefixes removed!", MESSAGE_TITLE: _current_message_title_timestamp()})
+        output = make_alfred_output(filtered_text, {MESSAGE: "Plus/minus prefixes removed!", MESSAGE_TITLE: time_stamp})
 
     elif action == "show_diffed_result":
         # Get input text from Alfred environment variable
@@ -1200,7 +1201,7 @@ def do():
         processed_text = show_diffed_result(input_text)
 
         # Prepare JSON output for Alfred
-        output = make_alfred_output(processed_text, {MESSAGE: "Diffed result shown!", MESSAGE_TITLE: _current_message_title_timestamp()})
+        output = make_alfred_output(processed_text, {MESSAGE: "Diffed result shown!", MESSAGE_TITLE: time_stamp})
     elif action == "show_reverse_diffed_result":
         # Get input text from Alfred environment variable
         input_text = os.getenv("entry", "").rstrip()
@@ -1209,7 +1210,7 @@ def do():
         processed_text = show_reverse_diffed_result(input_text)
 
         # Prepare JSON output for Alfred
-        output = make_alfred_output(processed_text, {MESSAGE: "Diffed result shown!", MESSAGE_TITLE: _current_message_title_timestamp()})
+        output = make_alfred_output(processed_text, {MESSAGE: "Diffed result shown!", MESSAGE_TITLE: time_stamp})
 
     elif action == "html_to_markdown":
         # Get input HTML from Alfred environment variable
@@ -1219,7 +1220,7 @@ def do():
         markdown_text = html_to_markdown(input_html)
 
         # Prepare JSON output for Alfred
-        output = make_alfred_output(markdown_text, {MESSAGE: "HTML converted to markdown!", MESSAGE_TITLE: _current_message_title_timestamp()})
+        output = make_alfred_output(markdown_text, {MESSAGE: "HTML converted to markdown!", MESSAGE_TITLE: time_stamp})
 
     elif action == "remove_spaces":
         # Get input text from Alfred environment variable
@@ -1229,7 +1230,7 @@ def do():
         processed_text = remove_spaces(input_text)
 
         # Prepare JSON output for Alfred
-        output = make_alfred_output(processed_text, {MESSAGE: "Spaces removed!", MESSAGE_TITLE: _current_message_title_timestamp()})
+        output = make_alfred_output(processed_text, {MESSAGE: "Spaces removed!", MESSAGE_TITLE: time_stamp})
 
     elif action == "split_verse_and_quote":
         # Get input text from Alfred environment variable
@@ -1243,7 +1244,7 @@ def do():
             processed_text,
             {
                 MESSAGE: "Verse split!",
-                MESSAGE_TITLE: _current_message_title_timestamp(),
+                MESSAGE_TITLE: time_stamp,
             },
         )
 
@@ -1255,7 +1256,7 @@ def do():
         processed_text = convert_literal_newlines(input_text)
 
         # Prepare JSON output for Alfred
-        output = make_alfred_output(processed_text, {MESSAGE: "Newlines converted!", MESSAGE_TITLE: _current_message_title_timestamp()})
+        output = make_alfred_output(processed_text, {MESSAGE: "Newlines converted!", MESSAGE_TITLE: time_stamp})
 
     elif action == "clip_to_commit":
         # Get clipboard content from Alfred environment variable
@@ -1283,7 +1284,7 @@ def do():
         rewritten = _git.rewrite_github_blob_for_pr_branch(input_url, pr_branch)
 
         # Prepare JSON output for Alfred
-        output = make_alfred_output(rewritten, {MESSAGE: "URL rewritten", MESSAGE_TITLE: _current_message_title_timestamp()})
+        output = make_alfred_output(rewritten, {MESSAGE: "URL rewritten", MESSAGE_TITLE: time_stamp})
 
     elif action == "diff_hunk_to_file_line":
         # Read unified diff text from Alfred environment variable 'entry'
@@ -1292,7 +1293,7 @@ def do():
         # Parse and produce path:line
         result = diff_hunk_to_file_line(input_text)
 
-        output = make_alfred_output(result, {MESSAGE: "Path:Line extracted", MESSAGE_TITLE: _current_message_title_timestamp()})
+        output = make_alfred_output(result, {MESSAGE: "Path:Line extracted", MESSAGE_TITLE: time_stamp})
 
     elif action == "open_clipboard_vscode_link":
         # Get clipboard content from Alfred environment variable
@@ -1310,7 +1311,7 @@ def do():
         # Prepare JSON output for Alfred
         output = make_alfred_output(
             amended_text,
-            {MESSAGE: "Links amended and copied!", MESSAGE_TITLE: _current_message_title_timestamp()},
+            {MESSAGE: "Links amended and copied!", MESSAGE_TITLE: time_stamp},
         )
 
     
