@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import re
 import a_process_text as pt
 
 
@@ -65,3 +66,8 @@ def test_do_action_split_verse_and_quote(capsys, monkeypatch):
     data = json.loads(captured.out)
 
     assert data["alfredworkflow"]["arg"] == "John 15:4\n“Remain in me, as I also remain in you…”"
+
+    # message title should be a timestamp string, not plain 'Success'
+    title = data["alfredworkflow"]["variables"]["message_title"]
+    assert title != "Success"
+    assert re.search(r"^\d{1,2} [A-Za-z]{3} - \d{1,2}:\d{2} [AP]M$", title)
