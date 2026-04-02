@@ -278,7 +278,7 @@ def do():
                         }}}
         output_json(output)
     elif action == 'sort_bible_verses':
-        journal_path = os.getenv('bible_verse_journal')
+        journal_path = os.getenv('notebook')
         if not journal_path:
             result = 'Error: bible_verse_journal not set'
             message_title = 'Missing env var'

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import process_text as pt
+import a_process_text as pt
 
 
 def test_llm_produces_two_words():
@@ -47,3 +47,21 @@ def test_do_action_clip_to_branch(capsys, monkeypatch):
     data = json.loads(captured.out)
 
     assert data["alfredworkflow"]["arg"] == "improve-save"
+
+
+def test_split_verse_and_quote():
+    out = pt.split_verse_and_quote("John 15:4 — “Remain in me, as I also remain in you…”")
+    assert out == "John 15:4\n“Remain in me, as I also remain in you…”"
+
+
+def test_do_action_split_verse_and_quote(capsys, monkeypatch):
+    import json, sys
+
+    monkeypatch.setenv("entry", "John 15:4 — “Remain in me, as I also remain in you…”")
+    monkeypatch.setattr(sys, "argv", ["process_text.py", "split_verse_and_quote"])
+
+    pt.do()
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+
+    assert data["alfredworkflow"]["arg"] == "John 15:4\n“Remain in me, as I also remain in you…”"

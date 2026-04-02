@@ -732,6 +732,26 @@ def remove_spaces(text):
     return text.replace(" ", "")
 
 
+def split_verse_and_quote(text):
+    """Split a verse and quote separated by a dash/em dash into two lines.
+
+    Example:
+      John 15:4 — “Remain in me, as I also remain in you…”
+    ->
+      John 15:4
+      “Remain in me, as I also remain in you…”
+    """
+    if not text or text.isspace():
+        return text
+
+    # split on em dash, en dash, or hyphen with optional surrounding spaces
+    parts = re.split(r"\s*[–—-]+\s*", text.strip(), maxsplit=1)
+    if len(parts) == 2 and parts[0] and parts[1]:
+        return f"{parts[0].strip()}\n{parts[1].strip()}"
+
+    return text
+
+
 def convert_literal_newlines(text):
     """Converts literal '\\n' sequences into actual newline characters."""
     if not text:
@@ -1200,6 +1220,16 @@ def do():
 
         # Prepare JSON output for Alfred
         output = make_alfred_output(processed_text, {MESSAGE: "Spaces removed!", MESSAGE_TITLE: "Success"})
+
+    elif action == "split_verse_and_quote":
+        # Get input text from Alfred environment variable
+        input_text = os.getenv("entry", "").strip()
+
+        # Convert verse formatting
+        processed_text = split_verse_and_quote(input_text)
+
+        # Prepare JSON output for Alfred
+        output = make_alfred_output(processed_text, {MESSAGE: "Verse split!", MESSAGE_TITLE: "Success"})
 
     elif action == "convert_literal_newlines":
         # Get input text from Alfred environment variable
