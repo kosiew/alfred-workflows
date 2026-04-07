@@ -25,6 +25,7 @@ import argparse
 import json
 import os
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Tuple, Optional
 
 # the script only needs standard library modules so it works in any Python
@@ -91,17 +92,24 @@ def get_starred_repos(headers: dict) -> List[Tuple[str, Optional[str], bool]]:
     return [(_parse_repo(r)) for r in raw]
 
 
+def fetch_org_repos(org_name: str, headers: dict) -> List[Tuple[str, Optional[str], bool]]:
+    repos = fetch_github_data(f"https://api.github.com/orgs/{org_name}/repos", headers)
+    return [_parse_repo(r) for r in repos]
+
+
 def get_org_repos(headers: dict, username: str) -> List[Tuple[str, Optional[str], bool]]:
     req = urllib.request.Request(f"https://api.github.com/users/{username}/orgs", headers=headers)
     with urllib.request.urlopen(req) as resp:
         orgs = json.loads(resp.read())
+    org_names = [o.get("login") for o in orgs if o.get("login")]
+    if not org_names:
+        return []
+
     all_repos: List[Tuple[str, Optional[str], bool]] = []
-    for o in orgs:
-        name = o.get("login")
-        if not name:
-            continue
-        repos = fetch_github_data(f"https://api.github.com/orgs/{name}/repos", headers)
-        all_repos.extend(_parse_repo(r) for r in repos)
+    with ThreadPoolExecutor(max_workers=min(5, len(org_names))) as executor:
+        futures = {executor.submit(fetch_org_repos, name, headers): name for name in org_names}
+        for future in as_completed(futures):
+            all_repos.extend(future.result())
     return all_repos
 
 
@@ -120,11 +128,24 @@ def get_hardcoded_repos() -> List[Tuple[str, Optional[str], bool]]:
 
 
 def gather_all_repos(headers: dict, username: str) -> List[Tuple[str, Optional[str], bool]]:
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = {
+            executor.submit(get_user_repos, headers): "user",
+            executor.submit(get_starred_repos, headers): "starred",
+        }
+        if username:
+            futures[executor.submit(get_org_repos, headers, username)] = "org"
+
+        results = {}
+        for future in as_completed(futures):
+            category = futures[future]
+            results[category] = future.result()
+
     repos: List[Tuple[str, Optional[str], bool]] = []
-    repos.extend(get_user_repos(headers))
-    repos.extend(get_starred_repos(headers))
+    repos.extend(results.get("user", []))
+    repos.extend(results.get("starred", []))
     if username:
-        repos.extend(get_org_repos(headers, username))
+        repos.extend(results.get("org", []))
     repos.extend(get_hardcoded_repos())
     return repos
 
