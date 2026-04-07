@@ -128,6 +128,7 @@ def get_hardcoded_repos() -> List[Tuple[str, Optional[str], bool]]:
 
 
 def gather_all_repos(headers: dict, username: str) -> List[Tuple[str, Optional[str], bool]]:
+    print(f"DEBUG: gather_all_repos start username={username!r}", file=sys.stderr)
     with ThreadPoolExecutor(max_workers=2) as executor:
         futures = {
             executor.submit(get_starred_repos, headers): "starred",
@@ -139,7 +140,9 @@ def gather_all_repos(headers: dict, username: str) -> List[Tuple[str, Optional[s
         results = {}
         for future in as_completed(futures):
             category = futures[future]
-            results[category] = future.result()
+            repos_for_category = future.result()
+            print(f"DEBUG: fetched {len(repos_for_category)} repos for {category}", file=sys.stderr)
+            results[category] = repos_for_category
 
     repos: List[Tuple[str, Optional[str], bool]] = []
     repos.extend(results.get("starred", []))
@@ -147,6 +150,7 @@ def gather_all_repos(headers: dict, username: str) -> List[Tuple[str, Optional[s
     if username:
         repos.extend(results.get("org", []))
     repos.extend(get_hardcoded_repos())
+    print(f"DEBUG: total repos after hardcoded append = {len(repos)}", file=sys.stderr)
     return repos
 
 
@@ -334,6 +338,11 @@ def main():
     }
     if token:
         headers["Authorization"] = f"Bearer {token}"
+
+    print(
+        f"DEBUG: github_username={github_username!r} query={query!r} cache_duration={cache_duration} token_set={bool(token)}",
+        file=sys.stderr,
+    )
 
     try:
         all_repos = gather_all_repos(headers, github_username)
