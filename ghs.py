@@ -346,17 +346,25 @@ def main():
 
     try:
         all_repos = gather_all_repos(headers, github_username)
+        print(f"DEBUG: gather_all_repos returned {len(all_repos)} repos", file=sys.stderr)
     except urllib.error.HTTPError as e:
         # GitHub returned a non-2xx response, surface the message in JSON
+        print(
+            f"DEBUG: HTTPError code={e.code!r} reason={e.reason!r}",
+            file=sys.stderr,
+        )
         print(json.dumps({"error": f"HTTPError {e.code}: {e.reason}"}))
         sys.exit(1)
     except urllib.error.URLError as e:
         # network problems (DNS, connectivity, etc.)
+        print(f"DEBUG: URLError reason={e.reason!r}", file=sys.stderr)
         print(json.dumps({"error": f"URLError: {e.reason}"}))
         sys.exit(1)
 
     processed = process_repositories(all_repos)
+    print(f"DEBUG: processed repos count={len(processed)}", file=sys.stderr)
     filtered = filter_repositories(processed, query)
+    print(f"DEBUG: filtered repos count={len(filtered)}", file=sys.stderr)
     print(generate_alfred_output(filtered, cache_duration, github_username))
 
 
