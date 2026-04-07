@@ -128,10 +128,10 @@ def get_hardcoded_repos() -> List[Tuple[str, Optional[str], bool]]:
 
 
 def gather_all_repos(headers: dict, username: str) -> List[Tuple[str, Optional[str], bool]]:
-    with ThreadPoolExecutor(max_workers=3) as executor:
+    with ThreadPoolExecutor(max_workers=2) as executor:
         futures = {
-            executor.submit(get_user_repos, headers): "user",
             executor.submit(get_starred_repos, headers): "starred",
+            executor.submit(get_user_repos, headers): "user",
         }
         if username:
             futures[executor.submit(get_org_repos, headers, username)] = "org"
@@ -142,8 +142,8 @@ def gather_all_repos(headers: dict, username: str) -> List[Tuple[str, Optional[s
             results[category] = future.result()
 
     repos: List[Tuple[str, Optional[str], bool]] = []
-    repos.extend(results.get("user", []))
     repos.extend(results.get("starred", []))
+    repos.extend(results.get("user", []))
     if username:
         repos.extend(results.get("org", []))
     repos.extend(get_hardcoded_repos())
