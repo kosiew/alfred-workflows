@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Convert the original bash-based GitHub search workflow into Python.
 
 This script mimics the behavior of `ghs-bash-script.sh` by querying the
