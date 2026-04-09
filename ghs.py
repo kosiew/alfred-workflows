@@ -122,6 +122,7 @@ def get_hardcoded_repos() -> List[Tuple[str, Optional[str], bool]]:
         ("apache/datafusion-python", "Python bindings for Apache DataFusion", False),
         ("apache/datafusion-ballista", "Apache DataFusion Ballista Distributed Query Engine", False),
         ("apache/arrow-rs", "Apache Arrow Rust implementation", False),
+        ("apache/airflow", "Apache Airflow - A platform to programmatically author, schedule and monitor workflows", False),
     ]
     return hard
 
