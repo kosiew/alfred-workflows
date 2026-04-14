@@ -129,7 +129,7 @@ def get_hardcoded_repos() -> List[Tuple[str, Optional[str], bool]]:
 
 def gather_all_repos(headers: dict, username: str) -> List[Tuple[str, Optional[str], bool]]:
     print(f"DEBUG: gather_all_repos start username={username!r}", file=sys.stderr)
-    with ThreadPoolExecutor(max_workers=2) as executor:
+    with ThreadPoolExecutor(max_workers=3) as executor:
         futures = {
             executor.submit(get_starred_repos, headers): "starred",
             executor.submit(get_user_repos, headers): "user",
