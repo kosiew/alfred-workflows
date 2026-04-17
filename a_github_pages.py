@@ -334,6 +334,46 @@ def refresh_taxonomy_pages(repo_root: Path, tags: list[str], categories: list[st
             taxonomy_path = repo_root / kind / slugify(value) / 'index.md'
             write_page_file(build_taxonomy_page_content(kind, value, matching_posts), taxonomy_path)
 
+
+def resolve_category_value(category: str, frontmatter_categories: list[str], frontmatter_tags: list[str]) -> str:
+    if category:
+        return category
+    if frontmatter_categories:
+        return frontmatter_categories[0]
+    if frontmatter_tags:
+        return frontmatter_tags[0]
+    return ''
+
+
+def resolve_category_list(frontmatter_categories: list[str], resolved_category: str) -> list[str]:
+    categories: list[str] = []
+    for candidate in frontmatter_categories + ([resolved_category] if resolved_category else []):
+        if candidate and candidate not in categories:
+            categories.append(candidate)
+    return categories
+
+
+def resolve_tags_list(tag_value: str, frontmatter_tags: list[str], category: str, first_frontmatter_tag: str) -> list[str]:
+    tags = normalize_frontmatter_list_value(tag_value) if tag_value else frontmatter_tags
+    if not tags and category and category != first_frontmatter_tag:
+        tags = [category]
+    return tags
+
+
+def update_post_content(content: str, category: str, tags: list[str], tag_value: str, categories: list[str]) -> tuple[str, list[str], list[str]]:
+    if os.getenv('category', '').strip():
+        content = insert_category(content, category)
+    if tag_value:
+        content = insert_tags(content, tags)
+
+    parsed_categories = parse_frontmatter_list_field(content, 'categories')
+    parsed_tags = parse_frontmatter_list_field(content, 'tags')
+    categories = parsed_categories or categories
+    tags = parsed_tags or tags
+    content = upsert_taxonomy_links(content, tags, categories)
+    return content, categories, tags
+
+
 def insert_category(content: str, category: str) -> str:
     if not category:
         return content
@@ -389,18 +429,9 @@ def publish(content: Optional[str] = None) -> dict:
     frontmatter_categories = parse_frontmatter_list_field(content, 'categories')
     frontmatter_tags = parse_frontmatter_list_field(content, 'tags')
 
-    category_from_frontmatter = frontmatter_categories[0] if frontmatter_categories else ''
-    category_from_tags = frontmatter_tags[0] if frontmatter_tags else ''
-    category = category or category_from_frontmatter or category_from_tags
-
-    categories = []
-    for value in frontmatter_categories + ([category] if category else []):
-        if value and value not in categories:
-            categories.append(value)
-
-    tags = normalize_frontmatter_list_value(tag_value) if tag_value else frontmatter_tags
-    if not tags and category and category != category_from_tags:
-        tags = [category]
+    category = resolve_category_value(category, frontmatter_categories, frontmatter_tags)
+    categories = resolve_category_list(frontmatter_categories, category)
+    tags = resolve_tags_list(tag_value, frontmatter_tags, category, frontmatter_tags[0] if frontmatter_tags else '')
 
     if not filename:
         filename = get_post_filename(content)
@@ -410,13 +441,8 @@ def publish(content: Optional[str] = None) -> dict:
     output_dir = repo_root / POSTS_PATH
     file_path = output_dir / filename
     file_path = create_unique_path(file_path)
-    if os.getenv('category', '').strip():
-        content = insert_category(content, category)
-    if tag_value:
-        content = insert_tags(content, tags)
-    categories = parse_frontmatter_list_field(content, 'categories') or categories
-    tags = parse_frontmatter_list_field(content, 'tags') or tags
-    content = upsert_taxonomy_links(content, tags, categories)
+
+    content, categories, tags = update_post_content(content, category, tags, tag_value, categories)
     write_page_file(content, file_path)
     refresh_taxonomy_pages(repo_root, tags, categories)
 
