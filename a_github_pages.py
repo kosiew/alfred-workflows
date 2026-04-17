@@ -16,9 +16,25 @@ PAGE_FILE = 'page_file'
 
 GITHUB_PAGES_URL = os.getenv('github_pages_url', 'https://kosiew.github.io')
 
+REPO_PATH = Path("~/GitHub/kosiew.github.io")  
+POSTS_DIR = REPO_PATH / "_posts"
+
+
 
 def output_json(a_dict):
     sys.stdout.write(json.dumps(a_dict))
+
+
+def build_alfred_response(arg: str = '', message: str = '', message_title: str = '', extra_variables: Optional[dict[str, str]] = None) -> dict:
+    variables = {MESSAGE: message, MESSAGE_TITLE: message_title}
+    if extra_variables:
+        variables.update(extra_variables)
+    return {
+        ALFREDWORKFLOW: {
+            ARG: arg,
+            VARIABLES: variables,
+        }
+    }
 
 
 def _run(cmd: list[str], cwd: Optional[str] = None, **kw) -> subprocess.CompletedProcess:
@@ -100,33 +116,14 @@ def git_commit_and_push(repo_root: Path, commit_message: str, remote: str, branc
         return f'Git failed: {exc.stderr.strip() or exc}'
 
 
-def publish_clipboard() -> dict:
-    content = get_clipboard_content()
+def publish_clipboard(content: Optional[str] = None) -> dict:
     if not content:
-        return {
-            ALFREDWORKFLOW: {
-                ARG: '',
-                VARIABLES: {MESSAGE: 'Clipboard is empty', MESSAGE_TITLE: 'Error'}
-            }
-        }
+        return build_alfred_response('', 'Clipboard is empty', 'Error')
 
-    repo_path = os.getenv('github_pages_repo')
-    if not repo_path:
-        return {
-            ALFREDWORKFLOW: {
-                ARG: '',
-                VARIABLES: {MESSAGE: 'github_pages_repo is not set', MESSAGE_TITLE: 'Missing env var'}
-            }
-        }
 
-    repo_root = Path(normalize_path(repo_path))
+    repo_root = Path(normalize_path(REPO_PATH))
     if not repo_root.exists():
-        return {
-            ALFREDWORKFLOW: {
-                ARG: '',
-                VARIABLES: {MESSAGE: f'Repo path does not exist: {repo_root}', MESSAGE_TITLE: 'Invalid repo path'}
-            }
-        }
+        return build_alfred_response('', f'Repo path does not exist: {repo_root}', 'Invalid repo path')
 
     filename = os.getenv('page_filename', '').strip()
     subdir = os.getenv('page_subdir', '').strip()
@@ -152,27 +149,19 @@ def publish_clipboard() -> dict:
         message_title = 'Published to GitHub Pages'
         message = f'{file_path} — {git_result}'
 
-    return {
-        ALFREDWORKFLOW: {
-            ARG: page_url,
-            VARIABLES: {
-                MESSAGE: message,
-                MESSAGE_TITLE: message_title,
-                PAGE_URL: page_url,
-                PAGE_FILE: str(file_path)
-            }
-        }
-    }
+    return build_alfred_response(
+        page_url,
+        message,
+        message_title,
+        {PAGE_URL: page_url, PAGE_FILE: str(file_path)},
+    )
 
 
 def do() -> None:
     action = sys.argv[1] if len(sys.argv) > 1 else ''
+    
+    entry = os.getenv('entry')
     if action == 'publish_clipboard' or action == 'save_clipboard':
-        output_json(publish_clipboard())
+        output_json(publish_clipboard(entry))
     else:
-        output_json({
-            ALFREDWORKFLOW: {
-                ARG: '',
-                VARIABLES: {MESSAGE: f'Unknown action: {action}', MESSAGE_TITLE: 'Invalid action'}
-            }
-        })
+        output_json(build_alfred_response('', f'Unknown action: {action}', 'Invalid action'))
