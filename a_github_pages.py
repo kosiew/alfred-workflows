@@ -536,15 +536,15 @@ def publish(content: Optional[str] = None) -> dict:
         },
     )
 
-def build_bibleverse_frontmatter(content: Optional[str] = None) -> dict:
-    if not content:
+def build_bibleverse_frontmatter(verse: Optional[str] = None) -> dict:
+    if not verse:
         return build_alfred_response('', 'Clipboard is empty', 'Error')
 
-    title, tag, categories = derive_bibleverse_frontmatter(content)
+    title, tag, categories = derive_bibleverse_frontmatter(verse)
     date = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S %z')
     escaped_tag = tag.replace('"', '\\"')
     escaped_categories = categories.replace('"', '\\"')
-    frontmatter = (
+    entry = (
         f"---\n"
         f"layout: post\n"
         f"title: \"{title}\"\n"
@@ -552,9 +552,9 @@ def build_bibleverse_frontmatter(content: Optional[str] = None) -> dict:
         f"tags: [\"{escaped_tag}\"]\n"
         f"categories: \"{escaped_categories}\"\n"
         f"---\n\n"
-        f"{content}"
+        f"{verse}"
     )
-    return build_alfred_response('', '', '', {'frontmatter': frontmatter})
+    return build_alfred_response('', '', '', {'entry': entry})
 
 def do() -> None:
     action = sys.argv[1] if len(sys.argv) > 1 else ''
