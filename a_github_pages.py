@@ -250,24 +250,28 @@ def insert_category(content: str, category: str) -> str:
         index += 1
 
     if index < len(lines) and lines[index].strip() == '---':
-        index += 1
-        while index < len(lines):
-            line = lines[index].strip()
-            if line == '---':
-                break
+        closing = index + 1
+        while closing < len(lines) and lines[closing].strip() != '---':
+            closing += 1
+
+        if closing >= len(lines):
+            frontmatter = f"---\ncategories: {category}\n---\n\n"
+            return frontmatter + content
+
+        for inner in range(index + 1, closing):
+            line = lines[inner].strip()
             if line.startswith('categories:'):
                 existing_categories = line[len('categories:'):].strip()
                 if existing_categories:
-                    categories_list = [c.strip() for c in existing_categories.split(',')]
+                    categories_list = [c.strip() for c in existing_categories.split(',') if c.strip()]
                     if category not in categories_list:
                         categories_list.append(category)
-                        lines[index] = f"categories: {', '.join(categories_list)}"
+                        lines[inner] = f"categories: {', '.join(categories_list)}"
                 else:
-                    lines[index] = f"categories: {category}"
+                    lines[inner] = f"categories: {category}"
                 return '\n'.join(lines)
-            index += 1
 
-        lines.insert(index, f"categories: {category}")
+        lines.insert(closing, f"categories: {category}")
         return '\n'.join(lines)
 
     frontmatter = f"---\ncategories: {category}\n---\n\n"
@@ -303,7 +307,7 @@ def publish(content: Optional[str] = None) -> dict:
     if not Path(filename).suffix:
         filename = f"{filename}.md"
 
-    output_dir = repo_root / '_posts'
+    output_dir = repo_root / '__posts'
     file_path = output_dir / filename
     file_path = create_unique_path(file_path)
     if os.getenv('category', '').strip():
