@@ -191,8 +191,11 @@ def get_book_index(book):
 
 def parse_bible_reference(ref_line):
     ref_line = ref_line.strip()
-    # Expected format: Book Chapter:Verse
-    m = re.match(r'^(?P<book>(?:\d+\s)?[A-Za-z][A-Za-z\s]*)\s+(?P<chapter>\d+):(?P<verse>\d+)$', ref_line)
+    # Expected format: Book Chapter:Verse or Book Chapter:Verse-Range
+    m = re.match(
+        r'^(?P<book>(?:\d+\s)?[A-Za-z][A-Za-z\s]*)\s+(?P<chapter>\d+)\s*:\s*'
+        r'(?P<verse>\d+)(?:[-–]\d+)?$'
+        , ref_line)
     if not m:
         return None
     book = m.group('book')
