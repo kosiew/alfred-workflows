@@ -440,21 +440,25 @@ def generate_import_statements(grouped_by_base, special_imports):
             if 'self' in simple_items:
                 sorted_simple_items.append('self')
             
-            # Add sorted module groups
-            sorted_items = sorted_simple_items + format_module_groups(module_groups)
-            
-            # Format the final import statement
-            # For readability and consistency with rustfmt standards
+            # Add sorted module groups before simple direct imports for readability
+            sorted_items = format_module_groups(module_groups) + sorted_simple_items
+
             if len(sorted_items) == 1:
-                # Single item - no braces needed
                 result.append(f"{prefix}{base_path}::{sorted_items[0]};")
-            elif any("{" in item for item in sorted_items) or len(sorted_items) > 2:
-                result.append(f"{prefix}{base_path}::{{")
-                for item in sorted_items:
-                    result.append(f"    {item},")
-                result.append("};")
             else:
-                result.append(f"{prefix}{base_path}::{{{', '.join(sorted_items)}}};")
+                should_multiline = (
+                    any("{" in item for item in sorted_items)
+                    or len(sorted_items) > 2
+                    or any("::" in item for item in sorted_items if item != 'self')
+                )
+
+                if should_multiline:
+                    result.append(f"{prefix}{base_path}::{{")
+                    for item in sorted_items:
+                        result.append(f"    {item},")
+                    result.append("};")
+                else:
+                    result.append(f"{prefix}{base_path}::{{{', '.join(sorted_items)}}};")
 
     return result
 
