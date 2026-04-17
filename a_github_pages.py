@@ -18,6 +18,66 @@ PAGE_FILE = 'page_file'
 GITHUB_PAGES_URL = os.getenv('github_pages_url', '')
 REPO_PATH = os.getenv('repo_path', '')
 POSTS_PATH = '_posts'
+LLM_PATH = os.getenv('llm_path', '/Users/kosiew/GitHub/llm/.venv/bin/llm')
+
+
+def _llm(flags: list[str], prompt: str, input_text: Optional[str] = None) -> str:
+    try:
+        proc = subprocess.run([LLM_PATH, *flags, prompt], input=input_text, text=True, capture_output=True, check=True)
+        return proc.stdout or ''
+    except Exception:
+        return 'llm failed'
+
+
+def _unwrap_fenced(text: str) -> str:
+    lines = text.strip().split('\n')
+    if len(lines) >= 2 and lines[0].startswith('```') and lines[-1].startswith('```'):
+        return '\n'.join(lines[1:-1])
+    return text
+
+
+def parse_bibleverse_frontmatter(output: str) -> tuple[str, str, str]:
+    title = ''
+    tag = ''
+    categories = ''
+    raw = _unwrap_fenced(output).strip()
+    for line in raw.splitlines():
+        if ':' not in line:
+            continue
+        key, value = line.split(':', 1)
+        key = key.strip().lower()
+        value = value.strip().strip('"\'"')
+        if key == 'title':
+            title = value
+        elif key == 'tag':
+            tag = value
+        elif key == 'tags':
+            tag = value
+        elif key == 'category':
+            categories = value
+        elif key == 'categories':
+            categories = value
+    return title, tag, categories
+
+
+def derive_bibleverse_frontmatter(content: str) -> tuple[str, str, str]:
+    prompt = (
+        'You are a Bible assistant. Given the following verse text, return exactly three values on separate lines:\n'
+        'title: a short summary of the verse\n'
+        'tag: the Bible book for the verse\n'
+        'categories: the Christian value or theme of the verse\n'
+        'Do not include any extra text. Use plain lowercase/uppercase values as appropriate.'
+    )
+    output = _llm([], prompt, input_text=content)
+    title, tag, categories = parse_bibleverse_frontmatter(output)
+    if not title:
+        title = get_page_title(content)
+    if not tag:
+        tag = 'Bible'
+    if not categories:
+        categories = 'faith'
+    return title, tag, categories
+
 
 def output_json(a_dict):
     sys.stdout.write(json.dumps(a_dict))
@@ -476,6 +536,25 @@ def publish(content: Optional[str] = None) -> dict:
         },
     )
 
+def build_bibleverse_frontmatter(content: Optional[str] = None) -> dict:
+    if not content:
+        return build_alfred_response('', 'Clipboard is empty', 'Error')
+
+    title, tag, categories = derive_bibleverse_frontmatter(content)
+    date = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S %z')
+    escaped_tag = tag.replace('"', '\\"')
+    escaped_categories = categories.replace('"', '\\"')
+    frontmatter = (
+        f"---\n"
+        f"layout: post\n"
+        f"title: \"{title}\"\n"
+        f"date: {date}\n"
+        f"tags: [\"{escaped_tag}\"]\n"
+        f"categories: \"{escaped_categories}\"\n"
+        f"---\n\n"
+        f"{content}"
+    )
+    return build_alfred_response('', '', '', {'frontmatter': frontmatter})
 
 def do() -> None:
     action = sys.argv[1] if len(sys.argv) > 1 else ''
@@ -483,5 +562,7 @@ def do() -> None:
     entry = os.getenv('entry')
     if action == 'publish':
         output_json(publish(entry))
+    elif action == 'build_bibleverse_frontmatter':
+        output_json(build_bibleverse_frontmatter(entry))
     else:
         output_json(build_alfred_response('', f'Unknown action: {action}', 'Invalid action'))
