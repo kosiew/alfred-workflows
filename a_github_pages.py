@@ -16,8 +16,8 @@ PAGE_URL = 'page_url'
 PAGE_FILE = 'page_file'
 
 GITHUB_PAGES_URL = os.getenv('github_pages_url', '')
-
 REPO_PATH = os.getenv('repo_path', '')
+POSTS_PATH = '_posts'
 
 def output_json(a_dict):
     sys.stdout.write(json.dumps(a_dict))
@@ -321,7 +321,7 @@ def build_taxonomy_page_content(kind: str, value: str, posts: list[dict[str, obj
 
 def refresh_taxonomy_pages(repo_root: Path, tags: list[str], categories: list[str]) -> None:
     targets = {'tags': tags, 'categories': categories}
-    posts_dir = repo_root / '_posts'
+    posts_dir = repo_root / POSTS_PATH
 
     if not posts_dir.exists():
         return
@@ -407,7 +407,7 @@ def publish(content: Optional[str] = None) -> dict:
     if not Path(filename).suffix:
         filename = f"{filename}.md"
 
-    output_dir = repo_root / '_posts'
+    output_dir = repo_root / POSTS_PATH
     file_path = output_dir / filename
     file_path = create_unique_path(file_path)
     if os.getenv('category', '').strip():
