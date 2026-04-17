@@ -283,58 +283,6 @@ def upsert_taxonomy_links(content: str, tags: list[str], categories: list[str]) 
     return f"{content}\n\n{block}\n"
 
 
-def parse_post_metadata(post_path: Path, repo_root: Path) -> dict[str, object]:
-    content = post_path.read_text(encoding='utf-8')
-    title, _ = parse_frontmatter_metadata(content)
-    if not title:
-        title = get_page_title(content)
-    return {
-        'title': title,
-        'url': get_relative_page_url(post_path, repo_root),
-        'tags': parse_frontmatter_list_field(content, 'tags'),
-        'categories': parse_frontmatter_list_field(content, 'categories'),
-    }
-
-
-def build_taxonomy_page_content(kind: str, value: str, posts: list[dict[str, object]]) -> str:
-    heading = f"{kind.title()}: {value}"
-    lines = [
-        '---',
-        f'title: "{heading}"',
-        'layout: page',
-        f'permalink: /{kind}/{slugify(value)}/',
-        '---',
-        '',
-        f'# {heading}',
-        '',
-    ]
-
-    if not posts:
-        lines.append('No posts yet.')
-    else:
-        for post in sorted(posts, key=lambda p: str(p['title']).lower()):
-            lines.append(f"- [{post['title']}]({post['url']})")
-
-    lines.append('')
-    return '\n'.join(lines)
-
-
-def refresh_taxonomy_pages(repo_root: Path, tags: list[str], categories: list[str]) -> None:
-    targets = {'tags': tags, 'categories': categories}
-    posts_dir = repo_root / POSTS_PATH
-
-    if not posts_dir.exists():
-        return
-
-    all_posts = [parse_post_metadata(path, repo_root) for path in sorted(posts_dir.glob('*.md'))]
-
-    for kind, values in targets.items():
-        for value in values:
-            matching_posts = [post for post in all_posts if value in post[kind]]
-            taxonomy_path = repo_root / kind / slugify(value) / 'index.md'
-            write_page_file(build_taxonomy_page_content(kind, value, matching_posts), taxonomy_path)
-
-
 def resolve_category_value(category: str, frontmatter_categories: list[str], frontmatter_tags: list[str]) -> str:
     if category:
         return category
@@ -444,7 +392,6 @@ def publish(content: Optional[str] = None) -> dict:
 
     content, categories, tags = update_post_content(content, category, tags, tag_value, categories)
     write_page_file(content, file_path)
-    refresh_taxonomy_pages(repo_root, tags, categories)
 
     page_url = get_page_url(file_path, repo_root, github_pages_url)
     message_title = 'Saved GitHub Pages content'
