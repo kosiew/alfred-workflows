@@ -249,6 +249,63 @@ def get_relative_page_url(page_path: Path, repo_root: Path) -> str:
     return f"/{rel_path.strip('/')}/"
 
 
+def is_full_datetime_with_tz(value: str) -> bool:
+    try:
+        datetime.datetime.strptime(value, '%Y-%m-%d %H:%M:%S %z')
+        return True
+    except ValueError:
+        return False
+
+
+def current_utc_timestamp() -> str:
+    return datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S %z')
+
+
+def normalize_frontmatter(content: str) -> str:
+    lines = content.splitlines()
+    index = 0
+
+    while index < len(lines) and not lines[index].strip():
+        index += 1
+
+    if index >= len(lines) or lines[index].strip() != '---':
+        return content
+
+    closing = index + 1
+    malformed = False
+    while closing < len(lines):
+        line = lines[closing].strip()
+        if re.fullmatch(r'-{3,}', line):
+            if line != '---':
+                lines[closing] = '---'
+                malformed = True
+            break
+        closing += 1
+
+    if closing >= len(lines):
+        lines.insert(closing, '---')
+        malformed = True
+
+    if malformed:
+        date_line = None
+        for inner in range(index + 1, closing):
+            match = re.match(r'^date:\s*(?P<quote>["\']?)(?P<date>.*?)(?P=quote)\s*$', lines[inner])
+            if match:
+                raw_date = match.group('date').strip()
+                if not is_full_datetime_with_tz(raw_date):
+                    lines[inner] = f"date: {current_utc_timestamp()}"
+                date_line = inner
+                break
+
+        if date_line is None:
+            lines.insert(index + 1, f"date: {current_utc_timestamp()}")
+
+    normalized = '\n'.join(lines)
+    if content.endswith('\n'):
+        normalized += '\n'
+    return normalized
+
+
 def build_taxonomy_link_line(label: str, values: list[str], base_path: str) -> str:
     if not values:
         return ''
@@ -374,6 +431,7 @@ def publish(content: Optional[str] = None) -> dict:
     category = os.getenv('category', '').strip()
     tag_value = os.getenv('tag', '').strip()
 
+    content = normalize_frontmatter(content)
     frontmatter_categories = parse_frontmatter_list_field(content, 'categories')
     frontmatter_tags = parse_frontmatter_list_field(content, 'tags')
 

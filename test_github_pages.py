@@ -1,4 +1,5 @@
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -50,6 +51,32 @@ Rust content body here.'''
     assert '<!-- gh-pages-taxonomy-links:start -->' in post_content
     assert 'Tags: [distributed-systems](/tags/distributed-systems/), [hashing](/tags/hashing/), [load-balancing](/tags/load-balancing/), [system-design](/tags/system-design/)' in post_content
     assert data['alfredworkflow']['arg'] == 'https://kosiew.github.io/_posts/2026-04-17-consistent-hashing-vs-rendezvous-hashing'
+
+
+def test_publish_rectifies_malformed_frontmatter(tmp_path, capsys, monkeypatch):
+    content = '''---
+layout: post
+title: "Rust patterns"
+date: 2026-04-17
+tags: [rust, systems-programming, design-patterns, ownership, safety]
+----------------
+
+Body content.'''
+    monkeypatch.setenv('entry', content)
+    monkeypatch.setenv('repo_path', str(tmp_path))
+    monkeypatch.setenv('github_pages_url', 'https://kosiew.github.io')
+    monkeypatch.setattr(sys, 'argv', ['a_github_pages.py', 'publish'])
+
+    gp.do()
+
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+    page_file = Path(data['alfredworkflow']['variables']['page_file'])
+    post_content = page_file.read_text(encoding='utf-8')
+
+    assert '---\nlayout: post\ntitle: "Rust patterns"\n' in post_content
+    assert re.search(r'^date: \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} [+-]\d{4}$', post_content, re.MULTILINE)
+    assert '\n---\n\nBody content.' in post_content
 
 
 def test_publish_returns_tag_category_pages_variables(tmp_path, capsys, monkeypatch):
