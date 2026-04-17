@@ -321,7 +321,7 @@ def build_taxonomy_page_content(kind: str, value: str, posts: list[dict[str, obj
 
 def refresh_taxonomy_pages(repo_root: Path, tags: list[str], categories: list[str]) -> None:
     targets = {'tags': tags, 'categories': categories}
-    posts_dir = repo_root / '__posts'
+    posts_dir = repo_root / '_posts'
 
     if not posts_dir.exists():
         return
