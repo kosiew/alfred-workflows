@@ -239,6 +239,101 @@ def git_commit_and_push(repo_root: Path, commit_message: str, remote: str, branc
     except subprocess.CalledProcessError as exc:
         return f'Git failed: {exc.stderr.strip() or exc}'
 
+
+def get_relative_page_url(page_path: Path, repo_root: Path) -> str:
+    rel_path = page_path.relative_to(repo_root).as_posix()
+    if rel_path.endswith('index.md'):
+        rel_path = rel_path[: -len('index.md')]
+    elif rel_path.endswith('.md'):
+        rel_path = rel_path[: -len('.md')]
+    return f"/{rel_path.strip('/')}/"
+
+
+def build_taxonomy_link_line(label: str, values: list[str], base_path: str) -> str:
+    if not values:
+        return ''
+    links = [f"[{value}]({base_path}/{slugify(value)}/)" for value in values]
+    return f"{label}: {', '.join(links)}"
+
+
+def upsert_taxonomy_links(content: str, tags: list[str], categories: list[str]) -> str:
+    marker_start = '<!-- gh-pages-taxonomy-links:start -->'
+    marker_end = '<!-- gh-pages-taxonomy-links:end -->'
+
+    category_line = build_taxonomy_link_line('Categories', categories, '/categories')
+    tag_line = build_taxonomy_link_line('Tags', tags, '/tags')
+
+    body_lines = [line for line in [category_line, tag_line] if line]
+    if not body_lines:
+        return content
+
+    block_lines = [
+        marker_start,
+        *body_lines,
+        marker_end,
+    ]
+    block = '\n'.join(block_lines)
+    pattern = re.compile(rf"{re.escape(marker_start)}.*?{re.escape(marker_end)}", re.DOTALL)
+
+    if pattern.search(content):
+        return pattern.sub(block, content)
+
+    if content.endswith('\n'):
+        return f"{content}\n{block}\n"
+    return f"{content}\n\n{block}\n"
+
+
+def parse_post_metadata(post_path: Path, repo_root: Path) -> dict[str, object]:
+    content = post_path.read_text(encoding='utf-8')
+    title, _ = parse_frontmatter_metadata(content)
+    if not title:
+        title = get_page_title(content)
+    return {
+        'title': title,
+        'url': get_relative_page_url(post_path, repo_root),
+        'tags': parse_frontmatter_list_field(content, 'tags'),
+        'categories': parse_frontmatter_list_field(content, 'categories'),
+    }
+
+
+def build_taxonomy_page_content(kind: str, value: str, posts: list[dict[str, object]]) -> str:
+    heading = f"{kind.title()}: {value}"
+    lines = [
+        '---',
+        f'title: "{heading}"',
+        'layout: page',
+        f'permalink: /{kind}/{slugify(value)}/',
+        '---',
+        '',
+        f'# {heading}',
+        '',
+    ]
+
+    if not posts:
+        lines.append('No posts yet.')
+    else:
+        for post in sorted(posts, key=lambda p: str(p['title']).lower()):
+            lines.append(f"- [{post['title']}]({post['url']})")
+
+    lines.append('')
+    return '\n'.join(lines)
+
+
+def refresh_taxonomy_pages(repo_root: Path, tags: list[str], categories: list[str]) -> None:
+    targets = {'tags': tags, 'categories': categories}
+    posts_dir = repo_root / '__posts'
+
+    if not posts_dir.exists():
+        return
+
+    all_posts = [parse_post_metadata(path, repo_root) for path in sorted(posts_dir.glob('*.md'))]
+
+    for kind, values in targets.items():
+        for value in values:
+            matching_posts = [post for post in all_posts if value in post[kind]]
+            taxonomy_path = repo_root / kind / slugify(value) / 'index.md'
+            write_page_file(build_taxonomy_page_content(kind, value, matching_posts), taxonomy_path)
+
 def insert_category(content: str, category: str) -> str:
     if not category:
         return content
@@ -298,6 +393,11 @@ def publish(content: Optional[str] = None) -> dict:
     category_from_tags = frontmatter_tags[0] if frontmatter_tags else ''
     category = category or category_from_frontmatter or category_from_tags
 
+    categories = []
+    for value in frontmatter_categories + ([category] if category else []):
+        if value and value not in categories:
+            categories.append(value)
+
     tags = normalize_frontmatter_list_value(tag_value) if tag_value else frontmatter_tags
     if not tags and category and category != category_from_tags:
         tags = [category]
@@ -314,7 +414,11 @@ def publish(content: Optional[str] = None) -> dict:
         content = insert_category(content, category)
     if tag_value:
         content = insert_tags(content, tags)
+    categories = parse_frontmatter_list_field(content, 'categories') or categories
+    tags = parse_frontmatter_list_field(content, 'tags') or tags
+    content = upsert_taxonomy_links(content, tags, categories)
     write_page_file(content, file_path)
+    refresh_taxonomy_pages(repo_root, tags, categories)
 
     page_url = get_page_url(file_path, repo_root, github_pages_url)
     message_title = 'Saved GitHub Pages content'
