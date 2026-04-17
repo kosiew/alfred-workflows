@@ -1,3 +1,4 @@
+import datetime
 import json
 import os
 import re
@@ -81,6 +82,50 @@ def get_page_title(content: str) -> str:
     return 'page'
 
 
+def parse_frontmatter_metadata(content: str) -> tuple[Optional[str], Optional[str]]:
+    lines = content.splitlines()
+    index = 0
+
+    while index < len(lines) and not lines[index].strip():
+        index += 1
+
+    if index >= len(lines) or lines[index].strip() != '---':
+        return None, None
+
+    index += 1
+    title = None
+    date_value = None
+
+    while index < len(lines):
+        line = lines[index].strip()
+        if line == '---':
+            break
+        if title is None:
+            title_match = re.match(r'^title:\s*(?P<quote>["\']?)(?P<title>.*?)(?P=quote)\s*$', line)
+            if title_match:
+                title = title_match.group('title').strip()[:60]
+        if date_value is None:
+            date_match = re.match(r'^date:\s*(?P<quote>["\']?)(?P<date>.+?)(?P=quote)\s*$', line)
+            if date_match:
+                raw_date = date_match.group('date').strip()
+                try:
+                    date_value = datetime.date.fromisoformat(raw_date[:10]).isoformat()
+                except ValueError:
+                    pass
+        index += 1
+
+    return title, date_value
+
+
+def get_post_filename(content: str) -> str:
+    title, date_value = parse_frontmatter_metadata(content)
+    if not title:
+        title = get_page_title(content)
+    if not date_value:
+        date_value = datetime.date.today().isoformat()
+    return f"{date_value}-{slugify(title)}.md"
+
+
 def normalize_path(path: str) -> str:
     return os.path.normpath(os.path.expanduser(path))
 
@@ -109,13 +154,13 @@ def write_page_file(content: str, output_path: Path) -> Path:
     return output_path
 
 
-def get_page_url(page_path: Path, repo_root: Path) -> str:
+def get_page_url(page_path: Path, repo_root: Path, github_pages_url: str) -> str:
     rel_path = page_path.relative_to(repo_root).as_posix()
     if rel_path.endswith('index.md'):
         rel_path = rel_path[: -len('index.md')]
     elif rel_path.endswith('.md'):
         rel_path = rel_path[: -len('.md')]
-    return f"{GITHUB_PAGES_URL.rstrip('/')}/{rel_path.lstrip('/')}"
+    return f"{github_pages_url.rstrip('/')}/{rel_path.lstrip('/')}"
 
 
 def git_commit_and_push(repo_root: Path, commit_message: str, remote: str, branch: str) -> str:
@@ -136,23 +181,23 @@ def publish(content: Optional[str] = None) -> dict:
         return build_alfred_response('', 'Clipboard is empty', 'Error')
 
 
-    repo_root = Path(normalize_path(REPO_PATH))
+    repo_root = Path(normalize_path(os.getenv('repo_path', '')))
     if not repo_root.exists():
         return build_alfred_response('', f'Repo path does not exist: {repo_root}', 'Invalid repo path')
 
+    github_pages_url = os.getenv('github_pages_url', '')
     filename = os.getenv('page_filename', '').strip()
-    subdir = os.getenv('page_subdir', '').strip()
     if not filename:
-        filename = f"{slugify(get_page_title(content))}.md"
+        filename = get_post_filename(content)
     if not Path(filename).suffix:
         filename = f"{filename}.md"
 
-    output_dir = repo_root / subdir if subdir else repo_root
+    output_dir = repo_root / '__posts'
     file_path = output_dir / filename
     file_path = create_unique_path(file_path)
     write_page_file(content, file_path)
 
-    page_url = get_page_url(file_path, repo_root)
+    page_url = get_page_url(file_path, repo_root, github_pages_url)
     message_title = 'Saved GitHub Pages content'
     message = str(file_path)
 
