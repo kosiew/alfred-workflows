@@ -113,7 +113,7 @@ def git_commit_and_push(repo_root: Path, commit_message: str, remote: str, branc
         return f'Git failed: {exc.stderr.strip() or exc}'
 
 
-def publish_clipboard(content: Optional[str] = None) -> dict:
+def publish(content: Optional[str] = None) -> dict:
     if not content:
         return build_alfred_response('', 'Clipboard is empty', 'Error')
 
@@ -158,7 +158,7 @@ def do() -> None:
     action = sys.argv[1] if len(sys.argv) > 1 else ''
     
     entry = os.getenv('entry')
-    if action == 'publish_clipboard' or action == 'save_clipboard':
-        output_json(publish_clipboard(entry))
+    if action == 'publish':
+        output_json(publish(entry))
     else:
         output_json(build_alfred_response('', f'Unknown action: {action}', 'Invalid action'))
