@@ -117,6 +117,70 @@ def parse_frontmatter_metadata(content: str) -> tuple[Optional[str], Optional[st
     return title, date_value
 
 
+def normalize_frontmatter_list_value(value: str) -> list[str]:
+    value = value.strip()
+    if not value:
+        return []
+    if value.startswith('[') and value.endswith(']'):
+        value = value[1:-1]
+    return [item.strip().strip('"\'"') for item in re.split(r'[\s,]+', value) if item.strip()]
+
+
+def parse_frontmatter_list_field(content: str, field_name: str) -> list[str]:
+    lines = content.splitlines()
+    index = 0
+
+    while index < len(lines) and not lines[index].strip():
+        index += 1
+
+    if index >= len(lines) or lines[index].strip() != '---':
+        return []
+
+    index += 1
+    while index < len(lines):
+        line = lines[index].strip()
+        if line == '---':
+            break
+        if line.startswith(f'{field_name}:'):
+            value = line[len(f'{field_name}:'):].strip()
+            return normalize_frontmatter_list_value(value)
+        index += 1
+
+    return []
+
+
+def insert_tags(content: str, tags: list[str]) -> str:
+    if not tags:
+        return content
+
+    lines = content.splitlines()
+    index = 0
+
+    while index < len(lines) and not lines[index].strip():
+        index += 1
+
+    if index < len(lines) and lines[index].strip() == '---':
+        index += 1
+        while index < len(lines):
+            line = lines[index].strip()
+            if line == '---':
+                break
+            if line.startswith('tags:'):
+                existing_tags = normalize_frontmatter_list_value(line[len('tags:'):].strip())
+                combined = []
+                for tag in existing_tags + tags:
+                    if tag not in combined:
+                        combined.append(tag)
+                lines[index] = f"tags: [{', '.join(combined)}]"
+                return '\n'.join(lines)
+            index += 1
+        lines.insert(index, f"tags: [{', '.join(tags)}]")
+        return '\n'.join(lines)
+
+    frontmatter = f"---\ntags: [{', '.join(tags)}]\n---\n\n"
+    return frontmatter + content
+
+
 def get_post_filename(content: str) -> str:
     title, date_value = parse_frontmatter_metadata(content)
     if not title:
@@ -221,6 +285,19 @@ def publish(content: Optional[str] = None) -> dict:
     github_pages_url = os.getenv('github_pages_url', '')
     filename = os.getenv('page_filename', '').strip()
     category = os.getenv('category', '').strip()
+    tag_value = os.getenv('tag', '').strip()
+
+    frontmatter_categories = parse_frontmatter_list_field(content, 'categories')
+    frontmatter_tags = parse_frontmatter_list_field(content, 'tags')
+
+    category_from_frontmatter = frontmatter_categories[0] if frontmatter_categories else ''
+    category_from_tags = frontmatter_tags[0] if frontmatter_tags else ''
+    category = category or category_from_frontmatter or category_from_tags
+
+    tags = normalize_frontmatter_list_value(tag_value) if tag_value else frontmatter_tags
+    if not tags and category and category != category_from_tags:
+        tags = [category]
+
     if not filename:
         filename = get_post_filename(content)
     if not Path(filename).suffix:
@@ -229,7 +306,10 @@ def publish(content: Optional[str] = None) -> dict:
     output_dir = repo_root / '_posts'
     file_path = output_dir / filename
     file_path = create_unique_path(file_path)
-    content = insert_category(content, category)
+    if os.getenv('category', '').strip():
+        content = insert_category(content, category)
+    if tag_value:
+        content = insert_tags(content, tags)
     write_page_file(content, file_path)
 
     page_url = get_page_url(file_path, repo_root, github_pages_url)
@@ -248,7 +328,13 @@ def publish(content: Optional[str] = None) -> dict:
         page_url,
         message,
         message_title,
-        {PAGE_URL: page_url, PAGE_FILE: str(file_path)},
+        {
+            PAGE_URL: page_url,
+            PAGE_FILE: str(file_path),
+            'tag': ', '.join(tags) if tags else '',
+            'category': category,
+            'pages': page_url,
+        },
     )
 
 

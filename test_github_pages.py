@@ -49,6 +49,26 @@ Rust content body here.'''
     assert data['alfredworkflow']['arg'] == 'https://kosiew.github.io/__posts/2026-04-17-consistent-hashing-vs-rendezvous-hashing'
 
 
+def test_publish_returns_tag_category_pages_variables(tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv('entry', 'Hello GitHub Pages!')
+    monkeypatch.setenv('repo_path', str(tmp_path))
+    monkeypatch.setenv('github_pages_url', 'https://kosiew.github.io')
+    monkeypatch.setenv('page_filename', 'test-page')
+    monkeypatch.setenv('category', 'examples')
+    monkeypatch.setenv('tag', 'alpha,beta')
+    monkeypatch.setattr(sys, 'argv', ['a_github_pages.py', 'publish'])
+
+    gp.do()
+
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+    variables = data['alfredworkflow']['variables']
+
+    assert variables['category'] == 'examples'
+    assert variables['tag'] == 'alpha, beta'
+    assert variables['pages'] == 'https://kosiew.github.io/__posts/test-page'
+
+
 def test_get_page_title_extracts_yaml_frontmatter_title():
     content = '''---
 title: "Consistent Hashing vs Rendezvous Hashing"
