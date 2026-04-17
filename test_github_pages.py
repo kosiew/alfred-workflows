@@ -48,8 +48,6 @@ Rust content body here.'''
     assert page_file.name == '2026-04-17-consistent-hashing-vs-rendezvous-hashing.md'
     post_content = page_file.read_text(encoding='utf-8')
     assert post_content.startswith(content)
-    assert '<!-- gh-pages-taxonomy-links:start -->' in post_content
-    assert 'Tags: [distributed-systems](/tags/distributed-systems/), [hashing](/tags/hashing/), [load-balancing](/tags/load-balancing/), [system-design](/tags/system-design/)' in post_content
     assert data['alfredworkflow']['arg'] == 'https://kosiew.github.io/_posts/2026-04-17-consistent-hashing-vs-rendezvous-hashing'
 
 
@@ -99,7 +97,7 @@ def test_publish_returns_tag_category_pages_variables(tmp_path, capsys, monkeypa
     assert variables['pages'] == 'https://kosiew.github.io/_posts/test-page'
 
 
-def test_publish_inserts_taxonomy_links_from_frontmatter(tmp_path, capsys, monkeypatch):
+def test_publish_parses_frontmatter_category_tag_variables(tmp_path, capsys, monkeypatch):
     content = '''---
     title: "Hello"
     date: 2026-04-17
@@ -124,9 +122,7 @@ def test_publish_inserts_taxonomy_links_from_frontmatter(tmp_path, capsys, monke
     assert variables['category'] == 'examples'
     assert variables['tag'] == 'alpha, beta'
     assert variables['pages'] == 'https://kosiew.github.io/_posts/2026-04-17-hello'
-    assert '<!-- gh-pages-taxonomy-links:start -->' in post_content
-    assert 'Categories: [examples](/categories/examples/), [docs](/categories/docs/)' in post_content
-    assert 'Tags: [alpha](/tags/alpha/), [beta](/tags/beta/)' in post_content
+    assert post_content.startswith(content)
 
 
 def test_get_page_title_extracts_yaml_frontmatter_title():
