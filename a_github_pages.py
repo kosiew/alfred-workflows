@@ -373,33 +373,6 @@ def build_taxonomy_link_line(label: str, values: list[str], base_path: str) -> s
     return f"{label}: {', '.join(links)}"
 
 
-def upsert_taxonomy_links(content: str, tags: list[str], categories: list[str]) -> str:
-    marker_start = '<!-- gh-pages-taxonomy-links:start -->'
-    marker_end = '<!-- gh-pages-taxonomy-links:end -->'
-
-    category_line = build_taxonomy_link_line('Categories', categories, '/categories')
-    tag_line = build_taxonomy_link_line('Tags', tags, '/tags')
-
-    body_lines = [line for line in [category_line, tag_line] if line]
-    if not body_lines:
-        return content
-
-    block_lines = [
-        marker_start,
-        *body_lines,
-        marker_end,
-    ]
-    block = '\n'.join(block_lines)
-    pattern = re.compile(rf"{re.escape(marker_start)}.*?{re.escape(marker_end)}", re.DOTALL)
-
-    if pattern.search(content):
-        return pattern.sub(block, content)
-
-    if content.endswith('\n'):
-        return f"{content}\n{block}\n"
-    return f"{content}\n\n{block}\n"
-
-
 def resolve_category_value(category: str, frontmatter_categories: list[str], frontmatter_tags: list[str]) -> str:
     if category:
         return category
@@ -435,7 +408,6 @@ def update_post_content(content: str, category: str, tags: list[str], tag_value:
     parsed_tags = parse_frontmatter_list_field(content, 'tags')
     categories = parsed_categories or categories
     tags = parsed_tags or tags
-    content = upsert_taxonomy_links(content, tags, categories)
     return content, categories, tags
 
 
