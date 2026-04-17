@@ -56,10 +56,28 @@ def get_clipboard_content() -> str:
 
 
 def get_page_title(content: str) -> str:
-    for line in content.splitlines():
+    lines = content.splitlines()
+    index = 0
+
+    while index < len(lines) and not lines[index].strip():
+        index += 1
+
+    if index < len(lines) and lines[index].strip() == '---':
+        index += 1
+        while index < len(lines):
+            line = lines[index].strip()
+            if line == '---':
+                index += 1
+                break
+            match = re.match(r'^title:\s*(?P<quote>["\']?)(?P<title>.*?)(?P=quote)\s*$', line)
+            if match:
+                return match.group('title').strip()[:60]
+            index += 1
+
+    for line in lines[index:]:
         line = line.strip()
         if line:
-            return line[:60].strip()
+            return line[:60]
     return 'page'
 
 

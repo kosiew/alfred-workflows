@@ -21,3 +21,14 @@ def test_publish_clipboard_writes_markdown_file(tmp_path, capsys, monkeypatch):
     page_file = Path(data['alfredworkflow']['variables']['page_file'])
     assert page_file.exists()
     assert page_file.read_text(encoding='utf-8') == 'Hello GitHub Pages!'
+
+
+def test_get_page_title_extracts_yaml_frontmatter_title():
+    content = '''---
+title: "Consistent Hashing vs Rendezvous Hashing"
+date: 2026-04-17
+tags: [distributed-systems, hashing, load-balancing, system-design]
+---
+
+Rust content body here.'''
+    assert gp.get_page_title(content) == 'Consistent Hashing vs Rendezvous Hashing'
