@@ -407,7 +407,7 @@ def publish(content: Optional[str] = None) -> dict:
     if not Path(filename).suffix:
         filename = f"{filename}.md"
 
-    output_dir = repo_root / '__posts'
+    output_dir = repo_root / '_posts'
     file_path = output_dir / filename
     file_path = create_unique_path(file_path)
     if os.getenv('category', '').strip():
