@@ -14,11 +14,10 @@ MESSAGE_TITLE = 'message_title'
 PAGE_URL = 'page_url'
 PAGE_FILE = 'page_file'
 
-GITHUB_PAGES_URL = os.getenv('github_pages_url', 'https://kosiew.github.io')
+GITHUB_PAGES_URL = os.getenv('github_pages_url')
 
-REPO_PATH = Path("~/GitHub/kosiew.github.io")  
-POSTS_DIR = REPO_PATH / "_posts"
-
+REPO_PATH = os.getenv('repo_path')
+    
 
 
 def output_json(a_dict):
