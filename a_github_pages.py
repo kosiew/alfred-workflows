@@ -14,11 +14,9 @@ MESSAGE_TITLE = 'message_title'
 PAGE_URL = 'page_url'
 PAGE_FILE = 'page_file'
 
-GITHUB_PAGES_URL = os.getenv('github_pages_url')
+GITHUB_PAGES_URL = os.getenv('github_pages_url', '')
 
-REPO_PATH = os.getenv('repo_path')
-    
-
+REPO_PATH = os.getenv('repo_path', '')
 
 def output_json(a_dict):
     sys.stdout.write(json.dumps(a_dict))
