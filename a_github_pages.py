@@ -175,6 +175,39 @@ def git_commit_and_push(repo_root: Path, commit_message: str, remote: str, branc
     except subprocess.CalledProcessError as exc:
         return f'Git failed: {exc.stderr.strip() or exc}'
 
+def insert_category(content: str, category: str) -> str:
+    if not category:
+        return content
+
+    lines = content.splitlines()
+    index = 0
+
+    while index < len(lines) and not lines[index].strip():
+        index += 1
+
+    if index < len(lines) and lines[index].strip() == '---':
+        index += 1
+        while index < len(lines):
+            line = lines[index].strip()
+            if line == '---':
+                break
+            if line.startswith('categories:'):
+                existing_categories = line[len('categories:'):].strip()
+                if existing_categories:
+                    categories_list = [c.strip() for c in existing_categories.split(',')]
+                    if category not in categories_list:
+                        categories_list.append(category)
+                        lines[index] = f"categories: {', '.join(categories_list)}"
+                else:
+                    lines[index] = f"categories: {category}"
+                return '\n'.join(lines)
+            index += 1
+
+        lines.insert(index, f"categories: {category}")
+        return '\n'.join(lines)
+
+    frontmatter = f"---\ncategories: {category}\n---\n\n"
+    return frontmatter + content
 
 def publish(content: Optional[str] = None) -> dict:
     if not content:
@@ -187,6 +220,7 @@ def publish(content: Optional[str] = None) -> dict:
 
     github_pages_url = os.getenv('github_pages_url', '')
     filename = os.getenv('page_filename', '').strip()
+    category = os.getenv('category', '').strip()
     if not filename:
         filename = get_post_filename(content)
     if not Path(filename).suffix:
@@ -195,6 +229,7 @@ def publish(content: Optional[str] = None) -> dict:
     output_dir = repo_root / '_posts'
     file_path = output_dir / filename
     file_path = create_unique_path(file_path)
+    content = insert_category(content, category)
     write_page_file(content, file_path)
 
     page_url = get_page_url(file_path, repo_root, github_pages_url)
